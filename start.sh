@@ -6,7 +6,7 @@ echo "Starting hianime-API (:3030)..."
 (cd "$BASE/hianime-API" && bun run dev) &
 
 echo "Starting anime-vault server (:4040)..."
-(cd "$BASE/anime-vault/server" && node index.js) &
+(cd "$BASE/anime-vault/server" && ANIME_DIR="$BASE/downloads/anime" node index.js) &
 
 echo "Starting server.py (FastAPI :8765)..."
 (cd "$BASE" && python3 server.py) &

@@ -91,10 +91,10 @@ app.get("/api/files", async (req, res) => {
 
 function parseFileEntry(filename, stat, folder) {
   // ファイル名から series/ep を推定
-  // 例: "進撃の巨人 Ep01 [1080p].mp4"
-  const epMatch   = filename.match(/Ep(\d+)/i);
+  // 例: "進撃の巨人 Ep01 [1080p].mp4" or "Hirogaru Sky Precure - E16.mp4"
+  const epMatch   = filename.match(/[-\s]E[Pp]?(\d+)/i);
   const qualMatch = filename.match(/\[(\d+p)\]/);
-  const series    = folder || filename.replace(/\s*Ep\d+.*$/i, "").trim();
+  const series    = folder || filename.replace(/\s*[-\s]E[Pp]?\d+.*$/i, "").replace(/\.mp4$/i,"").trim();
 
   const sizeMB = stat.size / 1024 / 1024;
   const size   = sizeMB >= 1024
