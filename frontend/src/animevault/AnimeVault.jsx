@@ -923,6 +923,90 @@ const STYLE = `
 .meta-write-state.writing { color:var(--amber); }
 .meta-write-state.done    { color:var(--green); }
 .meta-write-state.wait    { color:var(--dimmer); }
+
+/* ══ RESPONSIVE: TABLET ══ */
+@media (max-width:1024px) {
+  .sidebar { width:56px; }
+  .logo-mark { font-size:0; }
+  .logo-mark::after { content:'AV'; font-size:11px; font-weight:700; color:var(--cyan); }
+  .logo-sub { display:none; }
+  .nav-item { padding:10px 0; justify-content:center; font-size:0; }
+  .nav-item .nav-ico { font-size:18px; margin:0; }
+  .nav-badge { position:absolute; top:4px; right:4px; font-size:7px; padding:0 3px; }
+  .nav-group-label { display:none; }
+  .srv-status { display:none; }
+  .stats-row { grid-template-columns:repeat(2,1fr); }
+  .g2 { grid-template-columns:1fr; }
+  .settings-grid { grid-template-columns:1fr; }
+  .queue-item { grid-template-columns:24px 1fr 70px 80px 60px; }
+  .queue-speed, .queue-eta { display:none; }
+  .file-head, .file-row { grid-template-columns:22px 1fr 85px 100px; }
+  .file-series, .file-date { display:none; }
+  .folder-page { flex-direction:column; height:auto; }
+  .folder-tree { width:100%; max-height:180px; }
+  .sftp-grid { grid-template-columns:1fr; }
+  .meta-fields-grid { grid-template-columns:1fr; }
+}
+
+/* ══ RESPONSIVE: MOBILE ══ */
+@media (max-width:768px) {
+  .app { flex-direction:column; }
+  .sidebar {
+    width:100%; flex-direction:row; overflow-x:auto; overflow-y:hidden;
+    border-right:none; border-top:1px solid var(--border);
+    order:1;
+  }
+  .main { order:0; }
+  .logo { display:none; }
+  .nav-group { display:flex; flex-direction:row; padding:0; }
+  .nav-group-label { display:none; }
+  .nav-item {
+    flex-direction:column; padding:8px 14px; font-size:9px;
+    border-left:none; border-top:2px solid transparent; gap:2px;
+    white-space:nowrap;
+  }
+  .nav-item.active { border-left-color:transparent; border-top-color:var(--cyan); }
+  .nav-item .nav-ico { font-size:16px; width:auto; }
+  .nav-badge { position:absolute; top:2px; right:2px; font-size:7px; }
+  .srv-status { display:none; }
+
+  .topbar { padding:8px 12px; gap:8px; }
+  .topbar-title { font-size:10px; }
+  .topbar-actions { gap:4px; flex-wrap:wrap; }
+
+  .content { padding:12px; }
+  .stats-row { grid-template-columns:repeat(2,1fr); gap:8px; }
+  .stat-val { font-size:20px; }
+  .g2 { grid-template-columns:1fr; }
+
+  .search-bar { flex-wrap:wrap; }
+  .search-input { min-width:0; }
+
+  .queue-item { grid-template-columns:1fr; gap:6px; padding:10px; }
+  .queue-rank { display:none; }
+  .queue-quality, .queue-speed, .queue-eta { display:none; }
+
+  .file-head { display:none; }
+  .file-row { grid-template-columns:1fr 100px; gap:6px; }
+  .file-series, .file-date { display:none; }
+  .fb-toolbar { gap:6px; }
+
+  .detail-panel { margin:0; border-radius:0; max-width:100%; max-height:100vh; }
+  .detail-hero { flex-direction:column; }
+  .detail-poster { width:100%; }
+  .detail-poster img { max-height:200px; object-fit:cover; }
+  .detail-poster-ph { width:100%; }
+  .detail-eps-panel { padding:12px; }
+
+  .folder-page { flex-direction:column; height:auto; }
+  .folder-tree { width:100%; max-height:120px; }
+
+  .settings-grid { grid-template-columns:1fr; }
+  .sftp-grid { grid-template-columns:1fr; }
+  .meta-fields-grid { grid-template-columns:1fr; }
+
+  .modal-box, .zip-modal-box, .meta-modal-box { max-width:100%; margin:10px; }
+}
 `;
 
 // ══════════════════════════════════════════════════════════════════
@@ -1434,11 +1518,27 @@ function BrowsePage({ onDetail, toast }) {
   function handleInput(v) {
     setKeyword(v);
     clearTimeout(debRef.current);
+    if (/hianime\.to/.test(v) || /^[a-z0-9-]+-\d+$/.test(v.trim())) return;
     if (v.trim().length >= 2) {
       debRef.current = setTimeout(() => { setTab("search"); doSearch(v); }, 500);
     } else {
       setResults([]);
     }
+  }
+
+  async function handleUrlSubmit() {
+    const raw = keyword.trim();
+    if (!raw) return;
+    const urlMatch = raw.match(/hianime\.to\/watch\/([a-z0-9-]+-\d+)/);
+    if (urlMatch) { openDetail({ id: urlMatch[1] }); return; }
+    const idMatch = raw.match(/^[a-z0-9-]+-\d+$/);
+    if (idMatch) { openDetail({ id: raw }); return; }
+    setTab("search"); doSearch(raw);
+  }
+
+  async function pasteClipboard() {
+    try { const t = await navigator.clipboard.readText(); setKeyword(t); }
+    catch { toast("クリップボードの読み取りに失敗","warn"); }
   }
 
   async function openDetail(anime) {
@@ -1462,19 +1562,22 @@ function BrowsePage({ onDetail, toast }) {
   }
 
   const displayList = tab==="search" ? results : trending;
+  const isUrl = /hianime\.to|^[a-z0-9-]+-\d+$/.test(keyword.trim());
 
   return (
     <div>
       <div className="search-bar">
         <input
           className="search-input"
-          placeholder="アニメを検索… (例: attack on titan, 鬼滅の刃)"
+          placeholder="アニメを検索 または hianime.to URLを貼り付け"
           value={keyword}
           onChange={e => handleInput(e.target.value)}
-          onKeyDown={e => e.key==="Enter" && doSearch(keyword)}
+          onKeyDown={e => e.key==="Enter" && handleUrlSubmit()}
         />
-        <button className="btn primary" onClick={() => { setTab("search"); doSearch(keyword); }}>
-          {loading ? <Spinner/> : "検索"}
+        <button className="btn sm" onClick={pasteClipboard} title="貼り付け"
+          style={{padding:"5px 10px",fontSize:14,background:"var(--c3)",border:"1px solid var(--border2)",borderRadius:"var(--r)",cursor:"pointer",color:"var(--txt)"}}>📋</button>
+        <button className="btn primary" onClick={handleUrlSubmit}>
+          {loading ? <Spinner/> : isUrl ? "開く" : "検索"}
         </button>
       </div>
 

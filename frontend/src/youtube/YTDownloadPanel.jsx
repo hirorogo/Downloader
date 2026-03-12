@@ -194,6 +194,65 @@ const css = `
   .prevpath{font-size:11px;color:var(--text3);margin-top:4px}
   .divider{height:1px;background:var(--border);margin:14px 0}
   .section-title{font-family:var(--mono);font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;margin-top:16px}
+
+  /* ══ RESPONSIVE: TABLET ══ */
+  @media(max-width:1024px){
+    .layout{grid-template-columns:56px 1fr}
+    .nav{font-size:0;padding:10px 0;justify-content:center}
+    .nav .ni{font-size:18px;margin:0}
+    .nbadge{position:absolute;top:2px;right:2px;font-size:8px;padding:0 4px}
+    .nav{position:relative}
+    .sfooter{display:none}
+    .ftbl th:nth-child(n+4),.ftbl td:nth-child(n+4){display:none}
+  }
+
+  /* ══ RESPONSIVE: MOBILE ══ */
+  @media(max-width:768px){
+    .layout{grid-template-rows:48px 1fr 52px;grid-template-columns:1fr}
+    .topbar{grid-column:1;grid-row:1;padding:0 12px}
+    .sidebar{
+      grid-column:1;grid-row:3;
+      flex-direction:row;overflow-x:auto;overflow-y:hidden;
+      border-right:none;border-top:1px solid var(--border);
+    }
+    .nav{
+      flex-direction:column;padding:6px 12px;font-size:9px;
+      border-left:none;border-bottom:2px solid transparent;gap:2px;
+      white-space:nowrap;
+    }
+    .nav.on{border-left-color:transparent;border-bottom-color:var(--yt)}
+    .nav .ni{font-size:16px;width:auto}
+    .nbadge{position:static;margin-left:0;font-size:8px}
+    .sfooter{display:none}
+
+    .main{grid-column:1;grid-row:2;padding:14px}
+    .chip{display:none}
+    .chip:first-of-type{display:flex}
+
+    .sgrid{grid-template-columns:repeat(2,1fr)}
+    .card{padding:14px}
+
+    .qi{flex-direction:column;gap:10px}
+    .qthumb{width:100%;height:auto;aspect-ratio:16/9}
+    .qmeta{flex-wrap:wrap;gap:8px}
+
+    .ftbl th:nth-child(n+3),.ftbl td:nth-child(n+3){display:none}
+    .files-toolbar{flex-direction:column;align-items:stretch}
+    .files-search{min-width:0}
+
+    .folder-grid{grid-template-columns:1fr}
+    .folder-header{flex-wrap:wrap}
+    .folder-file-row{flex-direction:column}
+
+    .frow{flex-direction:column}
+    .ig{min-width:0}
+    .uiwrap .ifield{padding-right:12px}
+    .upbtn{position:static;transform:none;margin-top:8px;width:100%;text-align:center}
+    .uiwrap{display:flex;flex-direction:column}
+
+    .modal{max-width:100%;margin:10px}
+    .modal-body{padding:14px}
+  }
 `;
 
 // ── Metadata Modal ────────────────────────────────────────────────────────────
