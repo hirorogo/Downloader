@@ -3,8 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 // ══════════════════════════════════════════════════════════════════
 //  CONFIG
 // ══════════════════════════════════════════════════════════════════
-const DEFAULT_API   = "http://localhost:3030"; // hianime-API
-const DEFAULT_DL_API = typeof window.__DL_API__ !== "undefined" ? window.__DL_API__ : "http://localhost:4040";
+// API calls go through Flask proxy (relative URLs) for LAN compatibility
 
 // ══════════════════════════════════════════════════════════════════
 //  GLOBAL STYLES
@@ -927,43 +926,8 @@ const STYLE = `
 `;
 
 // ══════════════════════════════════════════════════════════════════
-//  MOCK SERVER-SIDE DATA  (replace with real fetch calls)
+//  (MOCK data removed — all data fetched from real APIs)
 // ══════════════════════════════════════════════════════════════════
-const MOCK_QUEUE = [
-  { id:"q1", title:"進撃の巨人", ep:"S4 E05", animeId:"attack-on-titan-112", quality:"1080p",
-    progress:67, speed:"4.2 MB/s", eta:"2:14", status:"active",  size:"780MB" },
-  { id:"q2", title:"進撃の巨人", ep:"S4 E06", animeId:"attack-on-titan-112", quality:"1080p",
-    progress:0,  speed:"—",       eta:"—",    status:"queued",  size:"770MB" },
-  { id:"q3", title:"葬送のフリーレン", ep:"E01", animeId:"frieren-beyond-journeys-end-18542", quality:"720p",
-    progress:0,  speed:"—",       eta:"—",    status:"queued",  size:"450MB" },
-  { id:"q4", title:"チェンソーマン", ep:"E12",  animeId:"chainsaw-man-17408",  quality:"1080p",
-    progress:100,speed:"—",       eta:"完了",  status:"done",   size:"654MB" },
-];
-
-const MOCK_FILES = [
-  { name:"進撃の巨人 Ep01 [1080p].mp4",  series:"進撃の巨人",  animeId:"attack-on-titan-112",                  ep:1,  size:"782MB", date:"2026-03-10", quality:"1080p" },
-  { name:"進撃の巨人 Ep02 [1080p].mp4",  series:"進撃の巨人",  animeId:"attack-on-titan-112",                  ep:2,  size:"741MB", date:"2026-03-10", quality:"1080p" },
-  { name:"進撃の巨人 Ep03 [1080p].mp4",  series:"進撃の巨人",  animeId:"attack-on-titan-112",                  ep:3,  size:"798MB", date:"2026-03-11", quality:"1080p" },
-  { name:"チェンソーマン Ep01 [1080p].mp4",series:"チェンソーマン",animeId:"chainsaw-man-17408",                ep:1,  size:"634MB", date:"2026-03-09", quality:"1080p" },
-  { name:"チェンソーマン Ep12 [1080p].mp4",series:"チェンソーマン",animeId:"chainsaw-man-17408",                ep:12, size:"651MB", date:"2026-03-09", quality:"1080p" },
-  { name:"鬼滅の刃 Ep01 [720p].mp4",     series:"鬼滅の刃",   animeId:"demon-slayer-kimetsu-no-yaiba-47",       ep:1,  size:"420MB", date:"2026-03-08", quality:"720p" },
-  { name:"葬送のフリーレン Ep01 [720p].mp4",series:"葬送のフリーレン",animeId:"frieren-beyond-journeys-end-18542",ep:1, size:"480MB", date:"2026-03-11", quality:"720p" },
-  { name:"葬送のフリーレン Ep02 [720p].mp4",series:"葬送のフリーレン",animeId:"frieren-beyond-journeys-end-18542",ep:2, size:"461MB", date:"2026-03-11", quality:"720p" },
-  { name:"葬送のフリーレン Ep03 [720p].mp4",series:"葬送のフリーレン",animeId:"frieren-beyond-journeys-end-18542",ep:3, size:"475MB", date:"2026-03-11", quality:"720p" },
-];
-
-const MOCK_LOGS = [
-  { time:"03/11 15:32:01", level:"INFO",    msg:"進撃の巨人 S4E05 ダウンロード開始 [1080p]" },
-  { time:"03/11 15:31:55", level:"SUCCESS", msg:"チェンソーマン E12 変換完了 → .mp4 (ffmpeg)" },
-  { time:"03/11 15:28:12", level:"INFO",    msg:"ffmpeg 変換開始: csm_ep12.m3u8 → csm_ep12.mp4" },
-  { time:"03/11 15:12:44", level:"WARN",    msg:"ネットワーク切断検知 — 自動リトライ (1/3)" },
-  { time:"03/11 15:12:58", level:"INFO",    msg:"リトライ成功 — ダウンロード再開" },
-  { time:"03/11 14:55:20", level:"SUCCESS", msg:"Discord Webhook 通知送信完了" },
-  { time:"03/11 14:55:19", level:"SUCCESS", msg:"進撃の巨人 S4E04 ダウンロード完了 [782MB]" },
-  { time:"03/11 14:40:01", level:"DEBUG",   msg:"GET /api/v1/stream?server=HD-2&type=sub&id=attack-on-titan-112::ep=1420 → 200" },
-  { time:"03/11 14:39:55", level:"INFO",    msg:"サーバー選択: HD-2 (sub)" },
-  { time:"03/11 14:10:00", level:"INFO",    msg:"AnimeVault サーバー起動 @ port 4040" },
-];
 
 // ══════════════════════════════════════════════════════════════════
 //  SMALL HELPERS
@@ -985,14 +949,12 @@ function Spinner() { return <span className="spin">⟳</span>; }
 // ══════════════════════════════════════════════════════════════════
 export default function AnimeVault() {
   const [page,    setPage]    = useState("home");
-  const [apiBase, setApiBase] = useState(DEFAULT_API);
-  const [dlBase,  setDlBase]  = useState(DEFAULT_DL_API);
   const [apiOnline, setApiOnline] = useState(null);
   const [dlOnline,  setDlOnline]  = useState(null);
   const [queue,   setQueue]   = useState([]);
   const [files,   setFiles]   = useState([]);
   const [filesLoading, setFilesLoading] = useState(true);
-  const [logs,    setLogs]    = useState(MOCK_LOGS);
+  const [logs,    setLogs]    = useState([]);
   const [detail,  setDetail]  = useState(null); // { anime, episodes }
   const [sysInfo, setSysInfo] = useState({ cpu:"23%", temp:"62°C", disk:"1.2TB空" });
   const [sftpConfig, setSftpConfig] = useState({
@@ -1009,69 +971,135 @@ export default function AnimeVault() {
   // ─ Ping APIs ─
   useEffect(() => {
     (async () => {
-      try { await fetch(`${apiBase}/api/v1/home`); setApiOnline(true); }
+      try { await fetch("/api/anime/home"); setApiOnline(true); }
       catch { setApiOnline(false); }
     })();
     (async () => {
-      try { await fetch(`${dlBase}/health`); setDlOnline(true); }
+      try { await fetch("/api/vault/health"); setDlOnline(true); }
       catch { setDlOnline(false); }
     })();
-  }, [apiBase, dlBase]);
+  }, []);
 
   // ─ ファイル一覧をサーバーから取得 ─
   const refreshFiles = useCallback(async () => {
     setFilesLoading(true);
     try {
-      const res = await fetch(`${dlBase}/api/files`);
+      const res = await fetch("/api/vault/files");
       const j = await res.json();
       if (j.ok) setFiles(j.files);
-      else setFiles(MOCK_FILES);
-    } catch { setFiles(MOCK_FILES); }
+      else setFiles([]);
+    } catch { setFiles([]); }
     setFilesLoading(false);
-  }, [dlBase]);
+  }, []);
 
   const refreshQueue = useCallback(async () => {
     try {
-      const res = await fetch(`${dlBase}/api/queue`);
+      const res = await fetch("/api/vault/queue");
       const j = await res.json();
-      if (j.ok && j.queue.length) setQueue(j.queue);
-      else setQueue(MOCK_QUEUE);
-    } catch { setQueue(MOCK_QUEUE); }
-  }, [dlBase]);
+      if (j.ok && j.queue?.length) setQueue(j.queue);
+      else setQueue([]);
+    } catch { setQueue([]); }
+  }, []);
 
   useEffect(() => { refreshFiles(); refreshQueue(); }, [refreshFiles, refreshQueue]);
 
-  // ─ Simulated queue progress ─
+  // ─ Poll queue & sysinfo periodically ─
   useEffect(() => {
-    const t = setInterval(() => {
-      setQueue(q => q.map(item => {
-        if (item.status === "active" && item.progress < 100) {
-          const np = Math.min(100, item.progress + Math.random() * 1.2);
-          return { ...item, progress: np, speed:`${(Math.random()*2+3).toFixed(1)} MB/s`,
-            eta:`${Math.floor((100-np)/10)}:${String(Math.floor(Math.random()*59)).padStart(2,"0")}` };
+    const tQ = setInterval(refreshQueue, 2000);
+    const tF = setInterval(refreshFiles, 15000);
+    return () => { clearInterval(tQ); clearInterval(tF); };
+  }, [refreshQueue, refreshFiles]);
+
+  // ─ Poll sysinfo ─
+  useEffect(() => {
+    const fetchSys = async () => {
+      try {
+        const resp = await fetch("/api/vault/sysinfo");
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.ok !== false) setSysInfo(data);
         }
-        return item;
-      }));
-    }, 1000);
+      } catch {}
+    };
+    fetchSys();
+    const t = setInterval(fetchSys, 5000);
     return () => clearInterval(t);
   }, []);
 
   const activeCount = queue.filter(q => q.status === "active").length;
   const queuedCount = queue.filter(q => q.status === "queued").length;
 
-  function addToQueue(animeTitle, ep, epNum, quality, animeId) {
+  async function addToQueue(animeTitle, ep, epNum, quality, animeId, audioType) {
+    const epLabel = `E${String(epNum).padStart(2,"0")}`;
+    const itemId = `q${Date.now()}_${epNum}`;
     const newItem = {
-      id: `q${Date.now()}`, title: animeTitle,
-      ep: `E${String(epNum).padStart(2,"0")}`, animeId,
+      id: itemId, title: animeTitle,
+      ep: epLabel, animeId,
       quality, progress:0, speed:"—", eta:"—", status:"queued", size:"—"
     };
     setQueue(q => [...q, newItem]);
-    setLogs(l => [{
-      time: new Date().toLocaleString("ja-JP",{month:"2-digit",day:"2-digit",
-        hour:"2-digit",minute:"2-digit",second:"2-digit"}).replace(/[\/]/g,"/"),
-      level:"INFO", msg:`キューに追加: ${animeTitle} ${newItem.ep} [${quality}]`
-    }, ...l]);
-    toast(`キュー追加: ${animeTitle} ${newItem.ep}`, "info");
+    const logNow = () => new Date().toLocaleString("ja-JP",{month:"2-digit",day:"2-digit",
+      hour:"2-digit",minute:"2-digit",second:"2-digit"}).replace(/[\/]/g,"/");
+    setLogs(l => [{ time: logNow(), level:"INFO", msg:`キューに追加: ${animeTitle} ${epLabel} [${quality}]` }, ...l]);
+
+    // 1. ストリームURL取得
+    const episodeId = ep.id || ep.episodeId || "";
+    if (!episodeId) {
+      setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:"エピソードID不明"} : i));
+      toast(`エラー: エピソードIDが見つかりません`, "error");
+      return;
+    }
+    setQueue(q => q.map(i => i.id===itemId ? {...i, status:"active", speed:"ストリーム取得中…"} : i));
+    try {
+      const streamRes = await fetch(`/api/anime/stream?id=${encodeURIComponent(episodeId)}&server=hd-1&type=${audioType||"sub"}`);
+      const streamData = await streamRes.json();
+      // data may be a single object or array depending on hianime-API version
+      const sd = Array.isArray(streamData?.data) ? streamData.data[0] : streamData?.data;
+      const hlsUrl = sd?.link?.file || sd?.sources?.[0]?.url;
+      if (!hlsUrl) {
+        setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:"ストリームURL取得失敗"} : i));
+        toast(`ストリーム取得失敗: ${animeTitle} ${epLabel}`, "error");
+        return;
+      }
+      setLogs(l => [{ time: logNow(), level:"INFO", msg:`ストリーム取得: ${animeTitle} ${epLabel}` }, ...l]);
+
+      // 2. ダウンロード開始 (ffmpeg via Flask)
+      const filename = `${animeTitle} ${epLabel} [${quality}]`;
+      const dlRes = await fetch("/api/anime/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: hlsUrl, filename, referer: sd?.referer || "https://megacloud.tv" }),
+      });
+      const dlData = await dlRes.json();
+      if (!dlData.task_id) {
+        setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:"DL開始失敗"} : i));
+        return;
+      }
+      setQueue(q => q.map(i => i.id===itemId ? {...i, status:"active", speed:"ダウンロード中…"} : i));
+
+      // 3. 進捗ポーリング
+      const pollId = setInterval(async () => {
+        try {
+          const pRes = await fetch(`/api/anime/progress/${dlData.task_id}`);
+          const p = await pRes.json();
+          if (p.status === "complete") {
+            clearInterval(pollId);
+            setQueue(q => q.map(i => i.id===itemId ? {...i, status:"done", progress:100, speed:"完了"} : i));
+            setLogs(l => [{ time: logNow(), level:"INFO", msg:`✓ DL完了: ${animeTitle} ${epLabel}` }, ...l]);
+            toast(`✓ 完了: ${animeTitle} ${epLabel}`, "info");
+          } else if (p.status === "error") {
+            clearInterval(pollId);
+            setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:p.error||"エラー"} : i));
+            toast(`エラー: ${animeTitle} ${epLabel}`, "error");
+          } else {
+            setQueue(q => q.map(i => i.id===itemId ? {...i, progress: p.progress||0, speed:`${p.progress||0}%`} : i));
+          }
+        } catch {}
+      }, 2000);
+    } catch (e) {
+      setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:e.message} : i));
+      toast(`エラー: ${e.message}`, "error");
+    }
   }
 
   return (
@@ -1153,7 +1181,7 @@ export default function AnimeVault() {
                  files:"ファイル管理",folders:"フォルダ管理",logs:"ログ",settings:"設定"}[page]
               }</span>
             </div>
-            <div className="api-url-pill">{apiBase}</div>
+            <div className="api-url-pill">/api proxy</div>
             <div className="topbar-actions">
               {page==="queue" && <button className="btn primary sm" onClick={()=>toast("キュー全体を開始しました","info")}>▶ 全て開始</button>}
               {page==="queue" && <button className="btn sm" onClick={()=>toast("全キューを一時停止","warn")}>⏸ 一時停止</button>}
@@ -1168,21 +1196,18 @@ export default function AnimeVault() {
 
           <div className="content">
             {page==="home"     && <HomePage  queue={queue} files={files} logs={logs} setPage={setPage}/>}
-            {page==="browse"   && <BrowsePage apiBase={apiBase} onDetail={setDetail} toast={toast} />}
+            {page==="browse"   && <BrowsePage onDetail={setDetail} toast={toast} />}
             {page==="queue"    && <QueuePage  queue={queue} setQueue={setQueue} toast={toast}/>}
-            {page==="files"    && <FilesPage  files={files} setFiles={setFiles} apiBase={apiBase} toast={toast} onQueue={addToQueue}
-                                   dlBase={dlBase}
+            {page==="files"    && <FilesPage  files={files} setFiles={setFiles} toast={toast} onQueue={addToQueue}
                                    onSftp={(target)=>{ setSftpTarget(target); setShowSftp(true); }}
                                    onZip={(target)=>{ setZipTarget(target); setShowZip(true); }}
                                    onMeta={(target)=>{ setMetaTarget(target); setShowMeta(true); }}/>}
-            {page==="folders"  && <FolderPage files={files} toast={toast} dlBase={dlBase}
+            {page==="folders"  && <FolderPage files={files} toast={toast}
                                    onSftp={(target)=>{ setSftpTarget(target); setShowSftp(true); }}
                                    onZip={(target)=>{ setZipTarget(target); setShowZip(true); }}
                                    onMeta={(target)=>{ setMetaTarget(target); setShowMeta(true); }}/>}
             {page==="logs"     && <LogsPage   logs={logs}/>}
-            {page==="settings" && <SettingsPage apiBase={apiBase} setApiBase={setApiBase}
-                                    dlBase={dlBase} setDlBase={setDlBase}
-                                    sftpConfig={sftpConfig} setSftpConfig={setSftpConfig}
+            {page==="settings" && <SettingsPage sftpConfig={sftpConfig} setSftpConfig={setSftpConfig}
                                     toast={toast}/>}
           </div>
         </main>
@@ -1192,8 +1217,8 @@ export default function AnimeVault() {
           <DetailOverlay
             data={detail}
             onClose={() => setDetail(null)}
-            onAddQueue={(ep, epNum, quality) => {
-              addToQueue(detail.anime.title, ep, epNum, quality, detail.anime.id);
+            onAddQueue={(ep, epNum, quality, audioType) => {
+              addToQueue(detail.anime.title, ep, epNum, quality, detail.anime.id, audioType);
             }}
             toast={toast}
           />
@@ -1215,7 +1240,6 @@ export default function AnimeVault() {
           <ZipModal
             files={files}
             target={zipTarget}
-            dlBase={dlBase}
             onClose={()=>{ setShowZip(false); setZipTarget(null); }}
             toast={toast}
           />
@@ -1225,7 +1249,6 @@ export default function AnimeVault() {
         {showMeta && (
           <MetadataModal
             files={metaTarget?.files || files}
-            dlBase={dlBase}
             onClose={()=>{ setShowMeta(false); setMetaTarget(null); }}
             toast={toast}
           />
@@ -1355,7 +1378,7 @@ function HomePage({ queue, files, logs, setPage }) {
 // ══════════════════════════════════════════════════════════════════
 //  BROWSE PAGE
 // ══════════════════════════════════════════════════════════════════
-function BrowsePage({ apiBase, onDetail, toast }) {
+function BrowsePage({ onDetail, toast }) {
   const [keyword, setKeyword] = useState("");
   const [results, setResults] = useState([]);
   const [trending, setTrending] = useState([]);
@@ -1367,23 +1390,22 @@ function BrowsePage({ apiBase, onDetail, toast }) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/api/v1/home`);
+        const res = await fetch("/api/anime/home");
         const j   = await res.json();
         if (j.success) {
           setTrending(j.data.trending || []);
         }
       } catch {
-        // use placeholder
         setTrending([]);
       }
     })();
-  }, [apiBase]);
+  }, []);
 
   async function doSearch(kw) {
     if (!kw.trim()) { setResults([]); return; }
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/api/v1/search?keyword=${encodeURIComponent(kw)}&page=1`);
+      const res = await fetch(`/api/anime/search?keyword=${encodeURIComponent(kw)}&page=1`);
       const j   = await res.json();
       if (j.success) setResults(j.data.response || []);
       else toast("検索失敗: "+JSON.stringify(j),"error");
@@ -1407,8 +1429,8 @@ function BrowsePage({ apiBase, onDetail, toast }) {
     toast("アニメ情報を取得中…","info");
     try {
       const [infoRes, epsRes] = await Promise.all([
-        fetch(`${apiBase}/api/v1/anime/${anime.id.split("?")[0]}`),
-        fetch(`${apiBase}/api/v1/episodes/${anime.id.split("?")[0]}`),
+        fetch(`/api/anime/info/${anime.id.split("?")[0]}`),
+        fetch(`/api/anime/episodes/${anime.id.split("?")[0]}`),
       ]);
       const infoJ = await infoRes.json();
       const epsJ  = await epsRes.json();
@@ -1520,7 +1542,7 @@ function DetailOverlay({ data, onClose, onAddQueue, toast }) {
     if (selected.size === 0) { toast("エピソードを選択してください","warn"); return; }
     selected.forEach(i => {
       const ep = episodes[i];
-      onAddQueue(ep, i+1, quality);
+      onAddQueue(ep, i+1, quality, audioType);
     });
     toast(`${selected.size}話をキューに追加しました [${quality}]`,"info");
     setSelected(new Set());
@@ -1701,7 +1723,7 @@ function QueuePage({ queue, setQueue, toast }) {
 // ══════════════════════════════════════════════════════════════════
 //  FILES PAGE  ― アニメ別グループ + URLまとめてDL + ダウンロードボタン
 // ══════════════════════════════════════════════════════════════════
-function FilesPage({ files, setFiles, apiBase, dlBase, toast, onQueue, onSftp, onZip, onMeta }) {
+function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
   const [filter,      setFilter]      = useState("");
   const [view,        setView]        = useState("list");
   const [expanded,    setExpanded]    = useState({});
@@ -1750,7 +1772,7 @@ function FilesPage({ files, setFiles, apiBase, dlBase, toast, onQueue, onSftp, o
     setFiles(fs=>fs.filter(f=>!(f.series===g.series&&s.has(f.name))));
     setSelected(p=>({...p,[g.series]:new Set()}));
     toast(`${s.size}ファイルを削除しました`,"warn");
-    [...s].forEach(name=>fetch(`${dlBase}/api/files/${encodeURIComponent(name)}`,{method:"DELETE"}).catch(()=>{}));
+    [...s].forEach(name=>fetch(`/api/vault/files/${encodeURIComponent(name)}`,{method:"DELETE"}).catch(()=>{}));
   }
   function deleteGroup(g) {
     setFiles(fs=>fs.filter(f=>f.series!==g.series));
@@ -1769,7 +1791,7 @@ function FilesPage({ files, setFiles, apiBase, dlBase, toast, onQueue, onSftp, o
     if(dlProgress[f.name]!=null) return;
     toast(`HTTP DL開始: ${f.name}`,"info");
     setDlProgress(p=>({...p,[f.name]:1}));
-    const url = `${dlBase}/api/download/${encodeURIComponent(f.path||f.name)}`;
+    const url = `/api/vault/download/${encodeURIComponent(f.path||f.name)}`;
     const a = document.createElement("a");
     a.href = url; a.download = f.name; a.click();
     let pct = 5;
@@ -1805,7 +1827,7 @@ function FilesPage({ files, setFiles, apiBase, dlBase, toast, onQueue, onSftp, o
     const animeId=match?match[1]:raw;
     setUrlLoading(true);
     try{
-      const res=await fetch(`${apiBase}/api/v1/anime/${animeId}`);
+      const res=await fetch(`/api/anime/info/${animeId}`);
       const j=await res.json();
       if(j.success) setUrlPreview({...j.data,id:animeId});
       else toast("アニメ情報の取得に失敗しました","error");
@@ -2082,60 +2104,11 @@ function FilesPage({ files, setFiles, apiBase, dlBase, toast, onQueue, onSftp, o
 //  METADATA MODAL  ― mp4にメタデータ自動取得＆書き込み
 // ══════════════════════════════════════════════════════════════════
 
-// hianime APIから取得するメタデータのモック (実際はfetchで置き換え)
-const ANIME_META_MOCK = {
-  "attack-on-titan-112": {
-    title:"Attack on Titan", titleJa:"進撃の巨人",
-    studio:"MAPPA / Wit Studio", year:"2013",
-    genres:["Action","Drama","Fantasy","Military"],
-    rating:"9.0", status:"Finished",
-    description:"ある日、超大型の巨人が現れ、百年の平和を築いていた壁が崩壊する。主人公のエレン、ミカサ、アルミンは故郷を失い、巨人と戦う兵士への道を歩み始める。",
-    poster:"https://cdn.myanimelist.net/images/anime/10/47347.jpg",
-    episodes: {
-      1:{ title:"二千年後の君へ", air:"2013-04-06", thumbnail:"" },
-      2:{ title:"その日", air:"2013-04-13", thumbnail:"" },
-      3:{ title:"絶望の中で鈍く光る", air:"2013-04-20", thumbnail:"" },
-    }
-  },
-  "chainsaw-man-17408": {
-    title:"Chainsaw Man", titleJa:"チェンソーマン",
-    studio:"MAPPA", year:"2022",
-    genres:["Action","Horror","Supernatural"],
-    rating:"8.5", status:"Finished",
-    description:"父親の借金のためにデビルハンターをする少年・デンジが、愛犬のポチタと合体しチェンソーマンとして生まれ変わる物語。",
-    poster:"https://cdn.myanimelist.net/images/anime/1806/126216.jpg",
-    episodes: {
-      1:{ title:"犬とチェンソー", air:"2022-10-11", thumbnail:"" },
-      12:{ title:"バラバラ殺人事件", air:"2022-12-27", thumbnail:"" },
-    }
-  },
-  "demon-slayer-kimetsu-no-yaiba-47": {
-    title:"Demon Slayer", titleJa:"鬼滅の刃",
-    studio:"ufotable", year:"2019",
-    genres:["Action","Historical","Supernatural"],
-    rating:"8.7", status:"Finished",
-    description:"炭治郎が鬼に家族を殺され、鬼にされた妹・禰豆子を人間に戻すため、鬼殺隊に入り修業を積む。",
-    poster:"https://cdn.myanimelist.net/images/anime/1286/99889.jpg",
-    episodes: { 1:{ title:"残酷", air:"2019-04-06", thumbnail:"" } }
-  },
-  "frieren-beyond-journeys-end-18542": {
-    title:"Frieren: Beyond Journey's End", titleJa:"葬送のフリーレン",
-    studio:"Madhouse", year:"2023",
-    genres:["Adventure","Drama","Fantasy","Slice of Life"],
-    rating:"9.3", status:"Finished",
-    description:"魔王討伐の旅を終えた後、エルフの魔法使いフリーレンが、かつての仲間の死を通じて「人生とは何か」を問い直す物語。",
-    poster:"https://cdn.myanimelist.net/images/anime/1015/138006.jpg",
-    episodes: {
-      1:{ title:"冒険の終わり", air:"2023-09-29", thumbnail:"" },
-      2:{ title:"別れの魔法", air:"2023-09-29", thumbnail:"" },
-      3:{ title:"魔法使いらしく", air:"2023-10-06", thumbnail:"" },
-    }
-  },
-};
+// ANIME_META_MOCK removed — metadata fetched from hianime API at runtime
 
 const META_WRITE_PHASES = ["取得","確認・編集","書込","完了"];
 
-function MetadataModal({ files, dlBase, onClose, toast }) {
+function MetadataModal({ files, onClose, toast }) {
   const [phase,       setPhase]       = useState(0); // 0=select 1=edit 2=writing 3=done
   const [activeIdx,   setActiveIdx]   = useState(0);
   const [fetching,    setFetching]    = useState(false);
@@ -2147,34 +2120,33 @@ function MetadataModal({ files, dlBase, onClose, toast }) {
   const cur = files[activeIdx];
 
   // ─ メタデータの初期値を各ファイルから生成 ─
-  const getDefault = useCallback((f) => {
-    const mock = ANIME_META_MOCK[f.animeId] || {};
-    const epMeta = mock.episodes?.[f.ep] || {};
+  const getDefault = useCallback((f, apiData) => {
+    const info = apiData?.anime?.info || {};
+    const moreInfo = apiData?.anime?.moreInfo || {};
     return {
-      title:       mock.titleJa    || f.series || "",
-      titleEn:     mock.title      || "",
-      episodeTitle: epMeta.title   || `Episode ${f.ep||""}`,
-      episode:     String(f.ep    || ""),
+      title:       info.jname || info.name || f.series || "",
+      titleEn:     info.name  || "",
+      episodeTitle: `Episode ${f.ep||""}`,
+      episode:     String(f.ep || ""),
       season:      "1",
-      studio:      mock.studio    || "",
-      year:        mock.year       || "",
-      genres:      mock.genres    || [],
-      rating:      mock.rating    || "",
-      description: mock.description|| "",
-      poster:      mock.poster    || "",
-      airDate:     epMeta.air      || f.date || "",
+      studio:      (moreInfo.studios || []).join(", ") || "",
+      year:        moreInfo.aired?.split(" ").pop() || "",
+      genres:      moreInfo.genres || [],
+      rating:      info.stats?.rating || "",
+      description: info.description || "",
+      poster:      info.poster || "",
+      airDate:     f.date || "",
       comment:     `Source: hianime · Quality: ${f.quality||""} · AnimeVault`,
-      // write options
       writeThumb:  true,
       writeTags:   true,
       writeChapters: false,
     };
   }, []);
 
-  // 初期化
+  // 初期化（基本データ）
   useEffect(() => {
     const m = {};
-    files.forEach(f => { m[f.name] = getDefault(f); });
+    files.forEach(f => { m[f.name] = getDefault(f, null); });
     setMetaMap(m);
   }, [files, getDefault]);
 
@@ -2183,23 +2155,27 @@ function MetadataModal({ files, dlBase, onClose, toast }) {
     setMetaMap(p => ({ ...p, [cur.name]: { ...p[cur.name], [key]: val } }));
   }
 
-  // ─ APIから自動取得（シミュレーション） ─
+  // ─ hianime APIから実メタデータを取得 ─
   async function fetchAll() {
     setFetching(true);
     toast("hianime APIからメタデータ取得中…", "info");
-    await new Promise(r => setTimeout(r, 1200));
     const m = {};
-    files.forEach(f => { m[f.name] = getDefault(f); });
+    const uniqueIds = [...new Set(files.map(f => f.animeId).filter(Boolean))];
+    const cache = {};
+    for (const aid of uniqueIds) {
+      try {
+        const res = await fetch(`/api/anime/info/${aid}`);
+        const j = await res.json();
+        if (j.data) cache[aid] = j.data;
+      } catch {}
+    }
+    files.forEach(f => {
+      m[f.name] = getDefault(f, cache[f.animeId] || null);
+    });
     setMetaMap(m);
     setFetching(false);
     setPhase(1);
     toast(`✓ ${files.length}件のメタデータを取得しました`, "info");
-    // 実際のAPIコール:
-    // for (const f of files) {
-    //   const res = await fetch(`${apiBase}/api/v1/anime/${f.animeId}`);
-    //   const j = await res.json();
-    //   m[f.name] = buildMeta(j.data, f);
-    // }
   }
 
   // ─ ffmpegコマンドプレビュー生成 ─
@@ -2234,16 +2210,17 @@ function MetadataModal({ files, dlBase, onClose, toast }) {
       const f = files[i];
       setWriteLog(l => l.map((e,j) => j===i ? {...e,state:"writing"} : e));
 
-      // サーバー側 API呼び出し（シミュレーション）
-      await new Promise(r => setTimeout(r, 600 + Math.random()*600));
-      // 実際:
-      // await fetch(`${dlBase}/api/metadata`, {
-      //   method:"POST",
-      //   headers:{"Content-Type":"application/json"},
-      //   body: JSON.stringify({ file: f.name, meta: metaMap[f.name] })
-      // });
+      try {
+        await fetch(`/api/vault/meta/write`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: f.name, metadata: metaMap[f.name] }),
+        });
+        setWriteLog(l => l.map((e,j) => j===i ? {...e,state:"done"} : e));
+      } catch {
+        setWriteLog(l => l.map((e,j) => j===i ? {...e,state:"err"} : e));
+      }
 
-      setWriteLog(l => l.map((e,j) => j===i ? {...e,state:"done"} : e));
       setAllProgress(Math.round((i+1)/files.length*100));
     }
 
@@ -2547,7 +2524,7 @@ function fmtMB(mb) {
   return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${Math.round(mb)} MB`;
 }
 
-function ZipModal({ files, target, dlBase, onClose, toast }) {
+function ZipModal({ files, target, onClose, toast }) {
   // scope: "all" | "series" | "custom"
   const [scope,      setScope]      = useState(target ? "custom" : "all");
   const [selected,   setSelected]   = useState(() => new Set((target?.files||[]).map(f=>f.name)));
@@ -2639,7 +2616,7 @@ function ZipModal({ files, target, dlBase, onClose, toast }) {
 
     // 実ZIPダウンロード
     try {
-      const res = await fetch(`${dlBase}/api/zip`, {
+      const res = await fetch("/api/vault/zip", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ files: targetFiles.map(f=>f.path||f.name), outputName: zipName })
@@ -2763,7 +2740,7 @@ function ZipModal({ files, target, dlBase, onClose, toast }) {
               <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--dimmer)",lineHeight:1.8,
                 background:"var(--c0)",padding:"10px 14px",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
                 <div style={{color:"var(--dim)",marginBottom:4}}>▸ サーバー側 API（port 4040 に実装が必要）:</div>
-                <code style={{color:"var(--amber)"}}>POST {dlBase}/api/zip</code>
+                <code style={{color:"var(--amber)"}}>POST /api/vault/zip</code>
                 <div style={{marginTop:4}}>{"{"} files: string[], outputName: string {"}"}</div>
                 <div style={{marginTop:4}}>→ レスポンス: <code style={{color:"var(--cyan)"}}>application/zip</code> バイナリストリーム</div>
               </div>
@@ -2834,31 +2811,7 @@ function ZipModal({ files, target, dlBase, onClose, toast }) {
 // ══════════════════════════════════════════════════════════════════
 //  SFTP MODAL
 // ══════════════════════════════════════════════════════════════════
-const SFTP_MOCK_TREE = {
-  "/media/anime": [
-    { name:"進撃の巨人", type:"dir", children:"/media/anime/進撃の巨人" },
-    { name:"チェンソーマン", type:"dir", children:"/media/anime/チェンソーマン" },
-    { name:"鬼滅の刃", type:"dir", children:"/media/anime/鬼滅の刃" },
-    { name:"葬送のフリーレン", type:"dir", children:"/media/anime/葬送のフリーレン" },
-  ],
-  "/media/anime/進撃の巨人": [
-    { name:"進撃の巨人 Ep01 [1080p].mp4", type:"file", size:"782MB" },
-    { name:"進撃の巨人 Ep02 [1080p].mp4", type:"file", size:"741MB" },
-    { name:"進撃の巨人 Ep03 [1080p].mp4", type:"file", size:"798MB" },
-  ],
-  "/media/anime/チェンソーマン": [
-    { name:"チェンソーマン Ep01 [1080p].mp4", type:"file", size:"634MB" },
-    { name:"チェンソーマン Ep12 [1080p].mp4", type:"file", size:"651MB" },
-  ],
-  "/media/anime/鬼滅の刃": [
-    { name:"鬼滅の刃 Ep01 [720p].mp4", type:"file", size:"420MB" },
-  ],
-  "/media/anime/葬送のフリーレン": [
-    { name:"葬送のフリーレン Ep01 [720p].mp4", type:"file", size:"480MB" },
-    { name:"葬送のフリーレン Ep02 [720p].mp4", type:"file", size:"461MB" },
-    { name:"葬送のフリーレン Ep03 [720p].mp4", type:"file", size:"475MB" },
-  ],
-};
+// SFTP_MOCK_TREE removed — directory listing fetched from real SFTP API
 
 function SFTPModal({ config, setConfig, target, onClose, toast }) {
   const [tab,       setTab]       = useState(target ? "transfer" : "connect");
@@ -2869,18 +2822,48 @@ function SFTPModal({ config, setConfig, target, onClose, toast }) {
   const [form,      setForm]      = useState({...config});
 
   const pathParts = remotePath.split("/").filter(Boolean);
-  const currentItems = SFTP_MOCK_TREE[remotePath] || [];
+  const [currentItems, setCurrentItems] = useState([]);
+  const [lsLoading, setLsLoading] = useState(false);
 
-  function connect() {
+  // Fetch directory listing when connected and path changes
+  useEffect(() => {
+    if (!connected) return;
+    setLsLoading(true);
+    fetch(`/api/vault/sftp/ls?path=${encodeURIComponent(remotePath)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok !== false && Array.isArray(data.items || data)) {
+          setCurrentItems(data.items || data);
+        } else {
+          setCurrentItems([]);
+        }
+      })
+      .catch(() => setCurrentItems([]))
+      .finally(() => setLsLoading(false));
+  }, [connected, remotePath]);
+
+  async function connect() {
     if(!form.host){toast("ホストを入力してください","warn");return;}
     setConnecting(true);
-    setTimeout(()=>{
-      setConnecting(false);
-      setConnected(true);
-      setConfig(form);
-      toast(`SFTP接続成功: ${form.user}@${form.host}`,"info");
-      if(target) setTab("transfer");
-    },1400);
+    try {
+      const resp = await fetch("/api/vault/sftp/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        setConnected(true);
+        setConfig(form);
+        toast(`SFTP接続成功: ${form.user}@${form.host}`, "info");
+        if (target) setTab("transfer");
+      } else {
+        toast(`SFTP接続失敗: ${data.error || "不明"}`, "warn");
+      }
+    } catch (e) {
+      toast(`SFTP接続エラー: ${e.message}`, "warn");
+    }
+    setConnecting(false);
   }
 
   function navigate(path) { setRemotePath(path); }
@@ -2889,20 +2872,25 @@ function SFTPModal({ config, setConfig, target, onClose, toast }) {
     setRemotePath(parts.join("/") || "/");
   }
 
-  function startTransfer(filename) {
+  async function startTransfer(filename) {
     if(dlProgress[filename]!=null) return;
-    let pct=0;
-    const iv=setInterval(()=>{
-      pct=Math.min(100,pct+Math.random()*10+5);
-      setDlProgress(p=>({...p,[filename]:Math.round(pct)}));
-      if(pct>=100){
-        clearInterval(iv);
-        setTimeout(()=>{
-          setDlProgress(p=>{const n={...p};delete n[filename];return n;});
-          toast(`✓ SFTP転送完了: ${filename}`,"info");
-        },700);
-      }
-    },280);
+    setDlProgress(p=>({...p,[filename]:0}));
+    try {
+      const resp = await fetch("/api/vault/sftp/put", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: [filename], remotePath }),
+      });
+      const data = await resp.json();
+      setDlProgress(p=>({...p,[filename]:100}));
+      setTimeout(() => {
+        setDlProgress(p=>{const n={...p};delete n[filename];return n;});
+        toast(`✓ SFTP転送完了: ${filename}`, "info");
+      }, 700);
+    } catch (e) {
+      setDlProgress(p=>{const n={...p};delete n[filename];return n;});
+      toast(`SFTP転送エラー: ${e.message}`, "warn");
+    }
   }
 
   function transferAll() {
@@ -3008,10 +2996,14 @@ function SFTPModal({ config, setConfig, target, onClose, toast }) {
                         {item.type==="file" && <span className="sftp-size">{item.size}</span>}
                         {item.type==="dir" && (
                           <button className="dl-sftp-btn" style={{marginLeft:"auto"}}
-                            onClick={e=>{e.stopPropagation();
-                              const ch=SFTP_MOCK_TREE[item.children]||[];
-                              ch.filter(x=>x.type==="file").forEach((f,i)=>setTimeout(()=>startTransfer(f.name),i*150));
-                              toast(`フォルダ「${item.name}」を転送開始`,"info");
+                            onClick={async(e)=>{e.stopPropagation();
+                              try {
+                                const r = await fetch(`/api/vault/sftp/ls?path=${encodeURIComponent(item.children)}`);
+                                const d = await r.json();
+                                const ch = (d.items || d || []).filter(x=>x.type==="file");
+                                ch.forEach((f,i)=>setTimeout(()=>startTransfer(f.name),i*150));
+                                toast(`フォルダ「${item.name}」を転送開始`,"info");
+                              } catch { toast("ディレクトリ取得エラー","warn"); }
                             }}>⤓ フォルダDL</button>
                         )}
                         {item.type==="file" && (
@@ -3088,7 +3080,7 @@ function SFTPModal({ config, setConfig, target, onClose, toast }) {
 // ══════════════════════════════════════════════════════════════════
 //  FOLDER PAGE  ― サーバー上フォルダ構造 + フォルダごとDL
 // ══════════════════════════════════════════════════════════════════
-function FolderPage({ files, toast, dlBase, onSftp, onZip, onMeta }) {
+function FolderPage({ files, toast, onSftp, onZip, onMeta }) {
   const [selectedFolder, setSelectedFolder] = useState(null);
   const [dlProgress, setDlProgress] = useState({});
 
@@ -3306,9 +3298,8 @@ function LogsPage({ logs }) {
 // ══════════════════════════════════════════════════════════════════
 //  SETTINGS PAGE
 // ══════════════════════════════════════════════════════════════════
-function SettingsPage({ apiBase, setApiBase, dlBase, setDlBase, sftpConfig, setSftpConfig, toast }) {
+function SettingsPage({ sftpConfig, setSftpConfig, toast }) {
   const [form, setForm] = useState({
-    apiBase, dlBase,
     discordWebhook:"",
     defaultQuality:"1080p",
     savePath:"/Volumes/Media/Anime",
@@ -3321,8 +3312,6 @@ function SettingsPage({ apiBase, setApiBase, dlBase, setDlBase, sftpConfig, setS
     sftpKeyPath: sftpConfig.keyPath,
   });
   function save() {
-    setApiBase(form.apiBase);
-    setDlBase(form.dlBase);
     setSftpConfig({
       host:form.sftpHost, port:form.sftpPort, user:form.sftpUser,
       password:form.sftpPassword, remotePath:form.sftpRemotePath, keyPath:form.sftpKeyPath
@@ -3346,8 +3335,10 @@ function SettingsPage({ apiBase, setApiBase, dlBase, setDlBase, sftpConfig, setS
         <div>
           <div className="card" style={{padding:"16px 18px",marginBottom:14}}>
             <div style={{fontFamily:"var(--mono)",fontSize:10,letterSpacing:".15em",textTransform:"uppercase",color:"var(--dim)",marginBottom:14}}>▸ API接続</div>
-            {field("apiBase","hianime-API URL","http://localhost:3030","スクレイピングAPIのベースURL")}
-            {field("dlBase","ダウンロードサーバーURL","http://localhost:4040","バックエンドダウンロードサーバーのURL")}
+            <div className="setting-group">
+              <label className="setting-label">API ルーティング</label>
+              <div className="setting-desc">全APIはFlaskプロキシ経由（相対URL）で接続。LAN内アクセスに対応済み。</div>
+            </div>
           </div>
           <div className="card" style={{padding:"16px 18px",marginBottom:14}}>
             <div style={{fontFamily:"var(--mono)",fontSize:10,letterSpacing:".15em",textTransform:"uppercase",color:"var(--dim)",marginBottom:14}}>▸ SFTP設定</div>

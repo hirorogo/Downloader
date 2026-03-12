@@ -525,7 +525,8 @@ async def delete_file(path: str):
 async def stream(file_path: str):
     p = SAVE_DIR / file_path
     if not p.exists(): raise HTTPException(404)
-    return FileResponse(str(p), media_type="video/mp4")
+    mt = "audio/mpeg" if p.suffix == ".mp3" else "audio/mp4" if p.suffix == ".m4a" else "video/mp4"
+    return FileResponse(str(p), media_type=mt, filename=p.name)
 
 @app.get("/api/info")
 async def get_info(url: str):

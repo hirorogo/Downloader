@@ -1,40 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-
-// ── モックデータ ──────────────────────────────────────────────────────────────
-const MOCK_QUEUE = [
-  { id:"1", title:"【ゆっくり解説】宇宙の謎を徹底解説", channel:"サイエンスチャンネル", episode:"単話", quality:"1080p", status:"tagging",     progress:97, speed:"—",       eta:"—",   size:"380 MB", thumbnail:"https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg", meta_written:false },
-  { id:"2", title:"React 18 完全入門講座【2024年版】",  channel:"コードアカデミー",     episode:"1-12", quality:"720p",  status:"downloading", progress:42, speed:"3.8 MB/s", eta:"4:21", size:"1.2 GB",  thumbnail:null, meta_written:false },
-  { id:"3", title:"Lo-fi Hip Hop Mix 2024",             channel:"ChillBeats",           episode:"単話", quality:"mp3",   status:"done",        progress:100,speed:"—",        eta:"—",   size:"42 MB",   thumbnail:null, meta_written:false },
-  { id:"4", title:"【Vlog】東京街歩き 2024",             channel:"TravelJapan",          episode:"単話", quality:"1080p", status:"done",        progress:100,speed:"—",        eta:"—",   size:"520 MB",  thumbnail:null, meta_written:true  },
-];
-
-const MOCK_FOLDERS = [
-  {
-    id:"folder-1", name:"サイエンスチャンネル", fileCount:8, totalSize:"2.9 GB", date:"2026-03-10",
-    files:[
-      { id:"f1a", title:"【ゆっくり解説】宇宙の謎を徹底解説", quality:"1080p", size:"380 MB", date:"2026-03-10", ext:"mp4", meta_written:true,  upload_date:"20240315", description:"宇宙の謎について", url:"https://youtube.com/watch?v=aaa" },
-      { id:"f1b", title:"ブラックホールの真実",               quality:"1080p", size:"410 MB", date:"2026-03-09", ext:"mp4", meta_written:true,  upload_date:"20240310", description:"ブラックホールとは", url:"https://youtube.com/watch?v=bbb" },
-      { id:"f1c", title:"量子力学入門",                       quality:"720p",  size:"290 MB", date:"2026-03-08", ext:"mp4", meta_written:false, upload_date:"20240305", description:"量子力学基礎",      url:"https://youtube.com/watch?v=ccc" },
-      { id:"f1d", title:"相対性理論をわかりやすく",           quality:"1080p", size:"460 MB", date:"2026-03-07", ext:"mp4", meta_written:true,  upload_date:"20240301", description:"相対性理論解説",    url:"https://youtube.com/watch?v=ddd" },
-      { id:"f1e", title:"宇宙の大きさとは",                   quality:"720p",  size:"310 MB", date:"2026-03-06", ext:"mp4", meta_written:false, upload_date:"20240220", description:"宇宙の広さを解説",  url:"https://youtube.com/watch?v=eee" },
-    ]
-  },
-  {
-    id:"folder-2", name:"コードアカデミー", fileCount:6, totalSize:"725 MB", date:"2026-03-10",
-    files:[
-      { id:"f2a", title:"React 18 完全入門 #01", quality:"720p", size:"95 MB",  date:"2026-03-10", ext:"mp4", meta_written:true,  upload_date:"20240201", description:"React入門 第1回", url:"https://youtube.com/watch?v=r01" },
-      { id:"f2b", title:"React 18 完全入門 #02", quality:"720p", size:"88 MB",  date:"2026-03-10", ext:"mp4", meta_written:true,  upload_date:"20240205", description:"React入門 第2回", url:"https://youtube.com/watch?v=r02" },
-      { id:"f2c", title:"TypeScript入門 完全版", quality:"480p", size:"210 MB", date:"2026-03-07", ext:"mp4", meta_written:false, upload_date:"20240110", description:"TS入門",          url:"https://youtube.com/watch?v=ts1" },
-    ]
-  },
-  {
-    id:"folder-3", name:"ChillBeats", fileCount:3, totalSize:"115 MB", date:"2026-03-09",
-    files:[
-      { id:"f3a", title:"Lo-fi Hip Hop Mix 2024", quality:"mp3", size:"42 MB", date:"2026-03-09", ext:"mp3", meta_written:true,  upload_date:"20240301", description:"Lofi mix", url:"https://youtube.com/watch?v=lo1" },
-      { id:"f3b", title:"Chill Study Beats Vol.2",quality:"mp3", size:"38 MB", date:"2026-03-08", ext:"mp3", meta_written:false, upload_date:"20240220", description:"Study music", url:"https://youtube.com/watch?v=lo2" },
-    ]
-  },
-];
+import { useState, useEffect, useRef, useCallback } from "react";
 
 const STATUS_META = {
   downloading:{ label:"ダウンロード中",  color:"#ff3b3b", icon:"⬇" },
@@ -249,25 +213,41 @@ function MetaModal({ file, onClose, onSave, onToast }) {
 
   const set = (k, v) => setFields(f => ({ ...f, [k]: v }));
 
-  // モック: 既存タグ（ffprobe から取得したもの）
-  const existingTags = file.meta_written ? {
-    "©nam (title)":       file.title,
-    "©ART (artist)":      file.channel || file.folderName,
-    "©alb (album)":       file.channel || file.folderName,
-    "©day (date)":        file.upload_date || "—",
-    "©gen (genre)":       "YouTube",
-    "©cmt (comment)":     file.url || "—",
-    "desc (description)": (file.description || "").slice(0, 60) + "...",
-    "covr (thumbnail)":   "埋め込み済み",
-  } : null;
+  const [existingTags, setExistingTags] = useState(null);
+  const [loadingTags, setLoadingTags] = useState(false);
+
+  // 既存タグを ffprobe 経由で取得
+  useEffect(() => {
+    if (!file.path) return;
+    setLoadingTags(true);
+    fetch(`/api/ytdl/metadata?path=${encodeURIComponent(file.path)}`)
+      .then(r => r.json())
+      .then(data => { if (data.tags) setExistingTags(data.tags); })
+      .catch(() => {})
+      .finally(() => setLoadingTags(false));
+  }, [file.path]);
 
   const handleSave = async () => {
+    if (!file.path) return;
     setSaving(true);
-    await new Promise(r => setTimeout(r, 1200)); // モック待機
+    try {
+      const resp = await fetch("/api/ytdl/metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: file.path, fields }),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        setSaved(true);
+        onSave?.(file.id || file.name);
+        onToast(`🏷 メタデータを書き込みました: ${file.title}`, "meta");
+      } else {
+        onToast(`メタデータ書き込みエラー: ${data.detail || "不明"}`, "error");
+      }
+    } catch (e) {
+      onToast(`メタデータ書き込みエラー: ${e.message}`, "error");
+    }
     setSaving(false);
-    setSaved(true);
-    onSave?.(file.id);
-    onToast(`🏷 メタデータを書き込みました: ${file.title}`, "meta");
   };
 
   const MP4_TAGS = [
@@ -296,7 +276,9 @@ function MetaModal({ file, onClose, onSave, onToast }) {
                 {file.meta_written ? "🏷 書き込み済み" : "未書き込み"}
               </span>
             </div>
-            {existingTags ? (
+            {loadingTags ? (
+              <div style={{fontSize:12,color:"var(--text3)"}}>タグ読み込み中...</div>
+            ) : existingTags ? (
               Object.entries(existingTags).map(([k, v]) => (
                 <div className="meta-tag-row" key={k}>
                   <span className="meta-tag-key">{k}</span>
@@ -469,7 +451,7 @@ function FilesPage({ folders, onToast }) {
           <div style={{flex:1}}/>
           <button className="btn btn-g btn-s" onClick={clearSel}>解除</button>
           <button className="btn btn-purple btn-s" onClick={()=>{onToast(`🏷 ${selected.size}ファイルにメタデータを一括書き込み中`,"meta");clearSel()}}>🏷 一括メタ書込</button>
-          <button className="btn btn-amber btn-s" onClick={()=>{onToast(`⬇ ${selected.size}ファイルをZIPダウンロード`,"info");clearSel()}}>⬇ ZIP DL</button>
+          <button className="btn btn-amber btn-s" onClick={()=>{selFiles.forEach((f,i)=>setTimeout(()=>{const a=document.createElement("a");a.href=`/api/ytdl/stream/${encodeURIComponent(f.folderName)}/${encodeURIComponent(f.name)}`;a.download=f.name;a.click()},i*300));onToast(`⬇ ${selected.size}ファイルをダウンロード`,"info");clearSel()}}>⬇ 一括DL</button>
           <button className="btn btn-blue btn-s" onClick={()=>setSftpTargets(selFiles)}>📡 SFTP</button>
         </div>
       )}
@@ -513,7 +495,7 @@ function FilesPage({ folders, onToast }) {
                   <div style={{display:"flex",gap:4}}>
                     <button className="btn btn-g btn-xs" title="再生">▶</button>
                     <button className="btn btn-purple btn-xs" title="メタデータ編集" onClick={()=>setMetaFile(f)}>🏷</button>
-                    <button className="btn btn-amber btn-xs" title="ダウンロード" onClick={()=>onToast(`⬇ ${f.title}`,"info")}>⬇</button>
+                    <button className="btn btn-amber btn-xs" title="ダウンロード" onClick={()=>{const a=document.createElement("a");a.href=`/api/ytdl/stream/${encodeURIComponent(f.folderName)}/${encodeURIComponent(f.name)}`;a.download=f.name;a.click()}}>⬇</button>
                     <button className="btn btn-blue btn-xs" title="SFTP" onClick={()=>setSftpTargets([f])}>📡</button>
                     <button className="btn btn-d btn-xs" title="削除">✕</button>
                   </div>
@@ -584,7 +566,7 @@ function FolderPage({ folders, onToast }) {
                 </div>
                 <div className="folder-actions" onClick={e=>e.stopPropagation()}>
                   <button className="btn btn-purple btn-xs" title="フォルダ一括メタ書込" onClick={e=>{e.stopPropagation();onToast(`🏷 "${folder.name}" のメタデータを一括書き込み`,"meta")}}>🏷</button>
-                  <button className="btn btn-amber btn-xs" title="ZIPダウンロード" onClick={e=>{e.stopPropagation();onToast(`📦 "${folder.name}" をZIPダウンロード`,"info")}}>⬇</button>
+                  <button className="btn btn-amber btn-xs" title="全ファイルDL" onClick={e=>{e.stopPropagation();folder.files.forEach((f,i)=>setTimeout(()=>{const a=document.createElement("a");a.href=`/api/ytdl/stream/${encodeURIComponent(f.folderName)}/${encodeURIComponent(f.name)}`;a.download=f.name;a.click()},i*300));onToast(`⬇ "${folder.name}" の${folder.files.length}ファイルをDL`,"info")}}>⬇</button>
                   <button className="btn btn-blue btn-xs" title="SFTPで転送" onClick={e=>{e.stopPropagation();setSftpTargets(folder.files)}}>📡</button>
                   <span style={{color:"var(--text3)",fontSize:12,marginLeft:2}}>{openId===folder.id?"▲":"▼"}</span>
                 </div>
@@ -601,7 +583,7 @@ function FolderPage({ folders, onToast }) {
                       <div style={{display:"flex",gap:4,marginLeft:8,flexShrink:0}}>
                         <button className="btn btn-g btn-xs">▶</button>
                         <button className="btn btn-purple btn-xs" title="メタデータ編集" onClick={()=>setMetaFile({...f,folderName:folder.name})}>🏷</button>
-                        <button className="btn btn-amber btn-xs" onClick={()=>onToast(`⬇ ${f.title}`,"info")}>⬇</button>
+                        <button className="btn btn-amber btn-xs" onClick={()=>{const a=document.createElement("a");a.href=`/api/ytdl/stream/${encodeURIComponent(f.folderName)}/${encodeURIComponent(f.name)}`;a.download=f.name;a.click()}}>⬇</button>
                         <button className="btn btn-blue btn-xs" onClick={()=>setSftpTargets([f])}>📡</button>
                       </div>
                     </div>
@@ -788,7 +770,10 @@ function NewDownload({ onAdd }) {
 
 // ── Queue Page ────────────────────────────────────────────────────────────────
 function QueuePage({ queue, setQueue }) {
-  const remove=id=>setQueue(q=>q.filter(i=>i.id!==id));
+  const remove=async(id)=>{
+    try { await fetch(`/api/ytdl/queue/${id}`,{method:"DELETE"}); } catch {}
+    setQueue(q=>q.filter(i=>i.id!==id));
+  };
   const pause=id=>setQueue(q=>q.map(i=>i.id===id?{...i,status:"paused"}:i));
   const groups=[
     {label:"処理中",items:queue.filter(i=>["downloading","converting","tagging"].includes(i.status))},
@@ -864,32 +849,88 @@ function Sidebar({ page, setPage, queueCount }) {
           {n.badge>0&&<span className="nbadge">{n.badge}</span>}
         </div>
       ))}
-      <div className="sfooter"><div className="spill"><div className="dot-g"/>localhost:8765</div></div>
+      <div className="sfooter"><div className="spill"><div className="dot-g"/>server.py :8765</div></div>
     </div>
   );
 }
 
 // ── APP ───────────────────────────────────────────────────────────────────────
+// ── ファイル一覧をフォルダ構造に変換 ──
+function filesToFolders(files) {
+  const groups = {};
+  for (const f of files) {
+    const dir = f.dir || "未分類";
+    if (!groups[dir]) groups[dir] = [];
+    groups[dir].push({
+      id: f.path || f.name,
+      name: f.name,
+      title: f.name.replace(/\.[^.]+$/, ""),
+      quality: f.ext === "mp3" ? "mp3" : `${f.size_mb > 500 ? "1080p" : "720p"}`,
+      size: `${f.size_mb} MB`,
+      date: f.date,
+      ext: f.ext,
+      meta_written: false,
+      path: f.path,
+      folderName: dir,
+    });
+  }
+  return Object.entries(groups).map(([name, gfiles]) => ({
+    id: `folder-${name}`,
+    name,
+    fileCount: gfiles.length,
+    totalSize: `${gfiles.reduce((a, f) => a + parseFloat(f.size), 0).toFixed(0)} MB`,
+    date: gfiles[0]?.date || "",
+    files: gfiles,
+  }));
+}
+
 let tid=0;
 export default function YTDownloadPanel() {
   const [page,setPage]=useState("overview");
-  const [queue,setQueue]=useState(MOCK_QUEUE);
-  const [folders]=useState(MOCK_FOLDERS);
+  const [queue,setQueue]=useState([]);
+  const [folders,setFolders]=useState([]);
   const [toasts,setToasts]=useState([]);
-  const [stats,setStats]=useState({cpu:28,mem:54,temp:59,battery:76,dlSpeed:"3.8 MB/s"});
+  const [stats,setStats]=useState({cpu:0,mem:0,temp:0,battery:100,dlSpeed:"—"});
 
-  useEffect(()=>{
-    const t=setInterval(()=>{
-      setQueue(q=>q.map(i=>{
-        if(i.status==="downloading"&&i.progress<100){const p=Math.min(95,i.progress+Math.random()*2.5);return{...i,progress:Math.round(p),status:p>=95?"converting":"downloading"}}
-        if(i.status==="converting"&&i.progress<97){const p=Math.min(97,i.progress+Math.random()*3);return{...i,progress:Math.round(p),status:p>=97?"tagging":"converting"}}
-        if(i.status==="tagging"&&i.progress<100){const p=Math.min(100,i.progress+Math.random()*1.5);return{...i,progress:Math.round(p),status:p>=100?"done":"tagging",meta_written:p>=100?true:i.meta_written}}
-        return i;
+  // ── API からキュー・ファイル・ステータスを取得 ──
+  const refreshQueue = useCallback(async () => {
+    try {
+      const resp = await fetch("/api/ytdl/queue");
+      const data = await resp.json();
+      if (Array.isArray(data)) setQueue(data);
+    } catch {}
+  }, []);
+
+  const refreshFiles = useCallback(async () => {
+    try {
+      const resp = await fetch("/api/ytdl/files");
+      const data = await resp.json();
+      if (Array.isArray(data)) setFolders(filesToFolders(data));
+    } catch {}
+  }, []);
+
+  const refreshStats = useCallback(async () => {
+    try {
+      const resp = await fetch("/api/ytdl/status");
+      const data = await resp.json();
+      setStats(s => ({
+        ...s,
+        cpu: data.cpu ?? s.cpu,
+        mem: data.mem ?? s.mem,
       }));
-      setStats(s=>({...s,cpu:Math.max(10,Math.min(90,s.cpu+(Math.random()-.5)*10)),temp:Math.max(45,Math.min(88,s.temp+(Math.random()-.5)*2))}));
-    },1400);
-    return()=>clearInterval(t);
-  },[]);
+    } catch {}
+  }, []);
+
+  // 初回読み込み
+  useEffect(() => { refreshQueue(); refreshFiles(); refreshStats(); }, [refreshQueue, refreshFiles, refreshStats]);
+
+  // ポーリング: キュー 1.5秒、ファイル 10秒、stats 5秒
+  useEffect(() => {
+    const tQ = setInterval(refreshQueue, 1500);
+    const tF = setInterval(refreshFiles, 10000);
+    const tS = setInterval(refreshStats, 5000);
+    return () => { clearInterval(tQ); clearInterval(tF); clearInterval(tS); };
+  }, [refreshQueue, refreshFiles, refreshStats]);
 
   const toast=(msg,type="success")=>{
     const id=++tid;
@@ -897,12 +938,32 @@ export default function YTDownloadPanel() {
     setTimeout(()=>setToasts(t=>t.filter(x=>x.id!==id)),3500);
   };
 
-  const handleAdd=({url,fmt,mode,ef,et,ispl})=>{
-    let host="#";try{host=new URL(url.startsWith("http")?url:"https://"+url).hostname}catch{}
-    const ep=ispl?(mode==="all"?"プレイリスト全話":mode==="range"?`#${ef}-${et}`:"1本"):"単話";
-    setQueue(q=>[...q,{id:String(Date.now()),title:"メタデータ取得中...",channel:host,episode:ep,quality:fmt,status:"pending",progress:0,speed:"—",eta:"—",size:"—",thumbnail:null,meta_written:false}]);
-    toast(`キューに追加しました [${fmt}]`);
-    setPage("queue");
+  const handleAdd=async({url,fmt,mode,ef,et,ispl,embedMeta,embedThumb})=>{
+    const fmtMap={"360p":"360p","480p":"480p","720p":"720p","1080p":"1080p","mp3":"mp3","m4a":"m4a"};
+    const body={
+      url,
+      format: fmtMap[fmt] || "1080p",
+      embed_meta: embedMeta ?? true,
+      embed_thumb: embedThumb ?? true,
+    };
+    if(ispl && mode==="range"){ body.pl_start=parseInt(ef)||1; body.pl_end=parseInt(et)||10; }
+    try {
+      const resp=await fetch("/api/ytdl/download",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body),
+      });
+      const data=await resp.json();
+      if(data.id) {
+        toast(`キューに追加しました [${fmt}]`);
+        refreshQueue();
+        setPage("queue");
+      } else {
+        toast(data.detail || data.error || "ダウンロード開始エラー","error");
+      }
+    } catch(e) {
+      toast(`API接続エラー: ${e.message}`,"error");
+    }
   };
 
   const activeCount=queue.filter(i=>["downloading","converting","tagging","pending"].includes(i.status)).length;

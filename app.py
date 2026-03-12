@@ -167,6 +167,15 @@ def serve_youtube_download(filename):
 
 # ─── Anime (proxy to hianime-API) ───────────────────────────────────────────
 
+@app.route('/api/anime/home')
+def anime_home():
+    try:
+        resp = http_requests.get(f'{HIANIME_API}/home', timeout=10)
+        return jsonify(resp.json())
+    except http_requests.RequestException as e:
+        return jsonify({'error': f'Anime API unavailable: {e}'}), 502
+
+
 @app.route('/api/anime/search')
 def anime_search():
     keyword = request.args.get('keyword', '')
@@ -284,6 +293,14 @@ def _do_anime_download(task_id, hls_url, output_path, filename, referer):
         download_tasks[task_id]['error'] = str(e)
 
 
+@app.route('/api/anime/progress/<task_id>')
+def anime_progress(task_id):
+    task = download_tasks.get(task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    return jsonify(task)
+
+
 @app.route('/api/downloads/anime/<filename>')
 def serve_anime_download(filename):
     return send_from_directory(ANIME_DIR, filename, as_attachment=True)
@@ -345,10 +362,36 @@ def ytdl_queue_delete(tid):
         return jsonify({'error': f'YTDL API unavailable: {e}'}), 502
 
 
-@app.route('/api/ytdl/files')
+@app.route('/api/ytdl/files', methods=['GET', 'DELETE'])
 def ytdl_files():
     try:
-        resp = http_requests.get(f'{YTDL_API}/api/files', timeout=10)
+        if request.method == 'DELETE':
+            resp = http_requests.delete(f'{YTDL_API}/api/files', params=request.args, timeout=10)
+        else:
+            resp = http_requests.get(f'{YTDL_API}/api/files', timeout=10)
+        return jsonify(resp.json()), resp.status_code
+    except http_requests.RequestException as e:
+        return jsonify({'error': f'YTDL API unavailable: {e}'}), 502
+
+
+@app.route('/api/ytdl/stream/<path:file_path>')
+def ytdl_stream(file_path):
+    try:
+        resp = http_requests.get(
+            f'{YTDL_API}/api/stream/{file_path}',
+            stream=True, timeout=300,
+        )
+        headers = {k: v for k, v in resp.headers.items()
+                   if k.lower() in ('content-type', 'content-length', 'accept-ranges', 'content-disposition')}
+        return Response(resp.iter_content(chunk_size=8192), status=resp.status_code, headers=headers)
+    except http_requests.RequestException as e:
+        return jsonify({'error': f'YTDL API unavailable: {e}'}), 502
+
+
+@app.route('/api/ytdl/logs')
+def ytdl_logs():
+    try:
+        resp = http_requests.get(f'{YTDL_API}/api/logs', params=request.args, timeout=10)
         return jsonify(resp.json()), resp.status_code
     except http_requests.RequestException as e:
         return jsonify({'error': f'YTDL API unavailable: {e}'}), 502
@@ -376,6 +419,15 @@ def ytdl_status():
 
 
 # ─── anime-vault (Express) proxy (/api/vault/*) ─────────────────────────────
+
+@app.route('/api/vault/health')
+def vault_health():
+    try:
+        resp = http_requests.get(f'{ANIMEVAULT_API}/health', timeout=5)
+        return jsonify(resp.json()), resp.status_code
+    except http_requests.RequestException as e:
+        return jsonify({'error': f'Vault API unavailable: {e}'}), 502
+
 
 @app.route('/api/vault/files')
 def vault_files():
@@ -443,10 +495,13 @@ def vault_queue_delete(qid):
         return jsonify({'error': f'Vault API unavailable: {e}'}), 502
 
 
-@app.route('/api/vault/sftp/<action>', methods=['POST'])
+@app.route('/api/vault/sftp/<action>', methods=['GET', 'POST'])
 def vault_sftp(action):
     try:
-        resp = http_requests.post(f'{ANIMEVAULT_API}/api/sftp/{action}', json=request.json, timeout=30)
+        if request.method == 'POST':
+            resp = http_requests.post(f'{ANIMEVAULT_API}/api/sftp/{action}', json=request.json, timeout=30)
+        else:
+            resp = http_requests.get(f'{ANIMEVAULT_API}/api/sftp/{action}', params=request.args, timeout=10)
         return jsonify(resp.json()), resp.status_code
     except http_requests.RequestException as e:
         return jsonify({'error': f'Vault API unavailable: {e}'}), 502
@@ -488,4 +543,4 @@ def health():
 # ─── Entry point ─────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    app.run(debug=True, port=8080)
+    app.run(host='0.0.0.0', debug=True, port=8080)
