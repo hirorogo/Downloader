@@ -221,7 +221,7 @@ function MetaModal({ file, onClose, onSave, onToast }) {
     if (!file.path) return;
     setLoadingTags(true);
     fetch(`/api/ytdl/metadata?path=${encodeURIComponent(file.path)}`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(data => { if (data.tags) setExistingTags(data.tags); })
       .catch(() => {})
       .finally(() => setLoadingTags(false));
@@ -424,7 +424,7 @@ function FilesPage({ folders, onToast }) {
 
   const allFiles=folderData.flatMap(f=>f.files.map(file=>({...file,folderName:f.name})));
   const filtered=allFiles.filter(f=>f.title.toLowerCase().includes(search.toLowerCase())||f.folderName.toLowerCase().includes(search.toLowerCase()));
-  const sorted=[...filtered].sort((a,b)=>sort==="date"?b.date.localeCompare(a.date):a.title.localeCompare(b.title));
+  const sorted=[...filtered].sort((a,b)=>sort==="date"?(b.date||"").localeCompare(a.date||""):(a.title||"").localeCompare(b.title||""));
 
   const toggle=id=>setSelected(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n});
   const toggleAll=()=>setSelected(s=>s.size===sorted.length&&sorted.length>0?new Set():new Set(sorted.map(f=>f.id)));
@@ -860,15 +860,16 @@ function filesToFolders(files) {
   const groups = {};
   for (const f of files) {
     const dir = f.dir || "未分類";
+    const fname = f.name || "unknown";
     if (!groups[dir]) groups[dir] = [];
     groups[dir].push({
-      id: f.path || f.name,
-      name: f.name,
-      title: f.name.replace(/\.[^.]+$/, ""),
-      quality: f.ext === "mp3" ? "mp3" : `${f.size_mb > 500 ? "1080p" : "720p"}`,
-      size: `${f.size_mb} MB`,
-      date: f.date,
-      ext: f.ext,
+      id: f.path || fname,
+      name: fname,
+      title: fname.replace(/\.[^.]+$/, ""),
+      quality: f.ext === "mp3" ? "mp3" : `${(f.size_mb || 0) > 500 ? "1080p" : "720p"}`,
+      size: `${f.size_mb || 0} MB`,
+      date: f.date || "",
+      ext: f.ext || "",
       meta_written: false,
       path: f.path,
       folderName: dir,
@@ -878,7 +879,7 @@ function filesToFolders(files) {
     id: `folder-${name}`,
     name,
     fileCount: gfiles.length,
-    totalSize: `${gfiles.reduce((a, f) => a + parseFloat(f.size), 0).toFixed(0)} MB`,
+    totalSize: `${gfiles.reduce((a, f) => a + (parseFloat(f.size) || 0), 0).toFixed(0)} MB`,
     date: gfiles[0]?.date || "",
     files: gfiles,
   }));

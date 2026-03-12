@@ -956,6 +956,7 @@ export default function AnimeVault() {
   const [filesLoading, setFilesLoading] = useState(true);
   const [logs,    setLogs]    = useState([]);
   const [detail,  setDetail]  = useState(null); // { anime, episodes }
+  const dlPollsRef = useRef([]); // track download polling intervals
   const [sysInfo, setSysInfo] = useState({ cpu:"23%", temp:"62°C", disk:"1.2TB空" });
   const [sftpConfig, setSftpConfig] = useState({
     host:"", port:"22", user:"", password:"", remotePath:"/media/anime", keyPath:""
@@ -1009,6 +1010,11 @@ export default function AnimeVault() {
     const tF = setInterval(refreshFiles, 15000);
     return () => { clearInterval(tQ); clearInterval(tF); };
   }, [refreshQueue, refreshFiles]);
+
+  // ─ Cleanup download polling on unmount ─
+  useEffect(() => {
+    return () => { dlPollsRef.current.forEach(id => clearInterval(id)); };
+  }, []);
 
   // ─ Poll sysinfo ─
   useEffect(() => {
@@ -1084,18 +1090,20 @@ export default function AnimeVault() {
       }
       setQueue(q => q.map(i => i.id===itemId ? {...i, status:"active", speed:"ダウンロード中…"} : i));
 
-      // 3. 進捗ポーリング
+      // 3. 進捗ポーリング (refで管理、unmount時にクリア)
       const pollId = setInterval(async () => {
         try {
           const pRes = await fetch(`/api/anime/progress/${dlData.task_id}`);
           const p = await pRes.json();
           if (p.status === "complete") {
             clearInterval(pollId);
+            dlPollsRef.current = dlPollsRef.current.filter(id => id !== pollId);
             setQueue(q => q.map(i => i.id===itemId ? {...i, status:"done", progress:100, speed:"完了"} : i));
             setLogs(l => [{ time: logNow(), level:"INFO", msg:`✓ DL完了: ${animeTitle} ${epLabel}` }, ...l]);
             toast(`✓ 完了: ${animeTitle} ${epLabel}`, "info");
           } else if (p.status === "error") {
             clearInterval(pollId);
+            dlPollsRef.current = dlPollsRef.current.filter(id => id !== pollId);
             setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:p.error||"エラー"} : i));
             toast(`エラー: ${animeTitle} ${epLabel}`, "error");
           } else {
@@ -1103,6 +1111,7 @@ export default function AnimeVault() {
           }
         } catch {}
       }, 2000);
+      dlPollsRef.current.push(pollId);
     } catch (e) {
       setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:e.message} : i));
       toast(`エラー: ${e.message}`, "error");
@@ -1321,10 +1330,10 @@ function HomePage({ queue, files, logs, setPage }) {
                 <div key={item.id} style={{padding:"10px 14px", borderBottom:"1px solid rgba(255,255,255,.03)"}}>
                   <div className="row-sb mb8">
                     <div style={{fontSize:12,fontWeight:500}}>{item.title} <span style={{color:"var(--dim)",fontSize:11}}>{item.ep}</span></div>
-                    <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--cyan)"}}>{item.progress.toFixed(0)}%</div>
+                    <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--cyan)"}}>{(item.progress||0).toFixed(0)}%</div>
                   </div>
                   <div className="prog-track">
-                    <div className="prog-fill prog-cyan" style={{width:`${item.progress}%`}}/>
+                    <div className="prog-fill prog-cyan" style={{width:`${item.progress||0}%`}}/>
                   </div>
                   <div className="row mt8" style={{fontSize:10,fontFamily:"var(--mono)",color:"var(--dim)"}}>
                     <span>{item.quality}</span>
@@ -1433,16 +1442,18 @@ function BrowsePage({ onDetail, toast }) {
   }
 
   async function openDetail(anime) {
+    if (!anime?.id) { toast("アニメIDが見つかりません","error"); return; }
+    const animeId = anime.id.split("?")[0];
     toast("アニメ情報を取得中…","info");
     try {
       const [infoRes, epsRes] = await Promise.all([
-        fetch(`/api/anime/info/${anime.id.split("?")[0]}`),
-        fetch(`/api/anime/episodes/${anime.id.split("?")[0]}`),
+        fetch(`/api/anime/info/${animeId}`),
+        fetch(`/api/anime/episodes/${animeId}`),
       ]);
       const infoJ = await infoRes.json();
       const epsJ  = await epsRes.json();
       onDetail({
-        anime: infoJ.success ? { ...infoJ.data, id: anime.id.split("?")[0] } : { ...anime, id: anime.id.split("?")[0] },
+        anime: infoJ.success ? { ...infoJ.data, id: animeId } : { ...anime, id: animeId },
         episodes: epsJ.success ? epsJ.data : [],
       });
     } catch(e) {
@@ -1708,11 +1719,11 @@ function QueuePage({ queue, setQueue, toast }) {
                 <div className="queue-info-sub">{item.ep} · {item.size}</div>
                 <div className="prog-track mt8">
                   <div className={`prog-fill ${item.status==="done"?"prog-green":"prog-cyan"}`}
-                       style={{width:`${item.progress}%`}}/>
+                       style={{width:`${item.progress||0}%`}}/>
                 </div>
               </div>
               <span className="queue-quality">{item.quality}</span>
-              <span className="queue-pct">{item.progress.toFixed(0)}%</span>
+              <span className="queue-pct">{(item.progress||0).toFixed(0)}%</span>
               <span className="queue-speed">{item.speed}</span>
               <span className="queue-eta">{item.eta}</span>
               <div style={{display:"flex",flexDirection:"column",gap:3}}>
@@ -1750,14 +1761,15 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
   const groups = useMemo(() => {
     const map = {};
     files.forEach(f => {
-      if (!map[f.series]) map[f.series] = { series:f.series, animeId:f.animeId, files:[] };
-      map[f.series].files.push(f);
+      const s = f.series || "不明";
+      if (!map[s]) map[s] = { series:s, animeId:f.animeId, files:[] };
+      map[s].files.push(f);
     });
     return Object.values(map)
       .filter(g => !filter ||
         g.series.toLowerCase().includes(filter.toLowerCase()) ||
-        g.files.some(f => f.name.toLowerCase().includes(filter.toLowerCase())))
-      .sort((a,b) => a.series.localeCompare(b.series,"ja"));
+        g.files.some(f => (f.name||"").toLowerCase().includes(filter.toLowerCase())))
+      .sort((a,b) => (a.series||"").localeCompare(b.series||"","ja"));
   }, [files, filter]);
 
   function toggleExpand(id) { setExpanded(e=>({...e,[id]:!e[id]})); }
@@ -1787,8 +1799,9 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
   }
   function groupSize(g) {
     const total = g.files.reduce((acc,f)=>{
-      const n=parseFloat(f.size);
-      return acc+(f.size.includes("GB")?n*1024:n);
+      const sz = f.size || "0MB";
+      const n=parseFloat(sz);
+      return acc+(sz.includes("GB")?n*1024:(isNaN(n)?0:n));
     },0);
     return total>=1024?`${(total/1024).toFixed(1)}GB`:`${Math.round(total)}MB`;
   }
@@ -1841,13 +1854,22 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
     }catch(e){toast("API接続エラー: "+e.message,"error");}
     setUrlLoading(false);
   }
-  function handleBulkAdd() {
+  async function handleBulkAdd() {
     if(!urlPreview){toast("まずURLを取得してください","warn");return;}
     const count=urlEpTo-urlEpFrom+1;
     if(count<=0){toast("話数の範囲が無効です","warn");return;}
-    for(let ep=urlEpFrom;ep<=urlEpTo;ep++)
-      onQueue(urlPreview.title,`E${String(ep).padStart(2,"0")}`,ep,urlQuality,urlPreview.id);
-    toast(`${urlPreview.title} E${urlEpFrom}〜E${urlEpTo}（${count}話）をキューに追加`,"info");
+    // エピソード一覧を取得してIDを得る
+    try {
+      const epsRes = await fetch(`/api/anime/episodes/${urlPreview.id}`);
+      const epsJ = await epsRes.json();
+      const epsList = epsJ.success ? epsJ.data : [];
+      if (!epsList.length) { toast("エピソード一覧の取得に失敗","error"); return; }
+      for(let ep=urlEpFrom;ep<=urlEpTo;ep++) {
+        const epObj = epsList.find(e => e.episodeNumber === ep) || epsList[ep-1];
+        if (epObj) onQueue(urlPreview.title, epObj, ep, urlQuality, urlPreview.id);
+      }
+      toast(`${urlPreview.title} E${urlEpFrom}〜E${urlEpTo}（${count}話）をキューに追加`,"info");
+    } catch(e) { toast(`エラー: ${e.message}`,"error"); }
     setUrlPreview(null);setUrlInput("");setShowUrl(false);
   }
 
@@ -2172,6 +2194,7 @@ function MetadataModal({ files, onClose, toast }) {
     for (const aid of uniqueIds) {
       try {
         const res = await fetch(`/api/anime/info/${aid}`);
+        if (!res.ok) continue;
         const j = await res.json();
         if (j.data) cache[aid] = j.data;
       } catch {}
@@ -2182,7 +2205,8 @@ function MetadataModal({ files, onClose, toast }) {
     setMetaMap(m);
     setFetching(false);
     setPhase(1);
-    toast(`✓ ${files.length}件のメタデータを取得しました`, "info");
+    const fetched = Object.keys(cache).length;
+    toast(fetched > 0 ? `✓ ${files.length}件のメタデータを取得しました` : `⚠ メタデータを取得できませんでした`, fetched > 0 ? "info" : "warn");
   }
 
   // ─ ffmpegコマンドプレビュー生成 ─
@@ -2218,11 +2242,12 @@ function MetadataModal({ files, onClose, toast }) {
       setWriteLog(l => l.map((e,j) => j===i ? {...e,state:"writing"} : e));
 
       try {
-        await fetch(`/api/vault/meta/write`, {
+        const res = await fetch(`/api/vault/meta/write`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ filename: f.name, metadata: metaMap[f.name] }),
         });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setWriteLog(l => l.map((e,j) => j===i ? {...e,state:"done"} : e));
       } catch {
         setWriteLog(l => l.map((e,j) => j===i ? {...e,state:"err"} : e));
@@ -2888,7 +2913,7 @@ function SFTPModal({ config, setConfig, target, onClose, toast }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ files: [filename], remotePath }),
       });
-      const data = await resp.json();
+      if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.error || `HTTP ${resp.status}`); }
       setDlProgress(p=>({...p,[filename]:100}));
       setTimeout(() => {
         setDlProgress(p=>{const n={...p};delete n[filename];return n;});
@@ -3107,8 +3132,9 @@ function FolderPage({ files, toast, onSftp, onZip, onMeta }) {
 
   function folderSize(folder) {
     const total=folder.files.reduce((acc,f)=>{
-      const n=parseFloat(f.size);
-      return acc+(f.size.includes("GB")?n*1024:n);
+      const sz=f.size||"0MB";
+      const n=parseFloat(sz);
+      return acc+(sz.includes("GB")?n*1024:(isNaN(n)?0:n));
     },0);
     return total>=1024?`${(total/1024).toFixed(1)}GB`:`${Math.round(total)}MB`;
   }
