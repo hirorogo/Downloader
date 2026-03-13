@@ -1913,8 +1913,10 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
     [...s].forEach(name=>fetch(`/api/vault/files/${encodeURIComponent(name)}`,{method:"DELETE"}).catch(()=>{}));
   }
   function deleteGroup(g) {
+    const names = g.files.map(f=>f.name);
     setFiles(fs=>fs.filter(f=>f.series!==g.series));
     toast(`「${g.series}」を全て削除しました`,"warn");
+    names.forEach(name=>fetch(`/api/vault/files/${encodeURIComponent(name)}`,{method:"DELETE"}).catch(()=>{}));
   }
   function groupSize(g) {
     const total = g.files.reduce((acc,f)=>{
@@ -1985,7 +1987,7 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
       if (!epsList.length) { toast("エピソード一覧の取得に失敗","error"); return; }
       for(let ep=urlEpFrom;ep<=urlEpTo;ep++) {
         const epObj = epsList.find(e => e.episodeNumber === ep) || epsList[ep-1];
-        if (epObj) onQueue(urlPreview.title, epObj, ep, urlQuality, urlPreview.id);
+        if (epObj) onQueue(urlPreview.title, epObj, ep, urlQuality, urlPreview.id, urlAudio);
       }
       toast(`${urlPreview.title} E${urlEpFrom}〜E${urlEpTo}（${count}話）をキューに追加`,"info");
     } catch(e) { toast(`エラー: ${e.message}`,"error"); }
@@ -2364,7 +2366,7 @@ function MetadataModal({ files, onClose, toast }) {
         const res = await fetch(`/api/vault/meta/write`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename: f.name, metadata: metaMap[f.name] }),
+          body: JSON.stringify({ filename: f.name, meta: metaMap[f.name] }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setWriteLog(l => l.map((e,j) => j===i ? {...e,state:"done"} : e));
@@ -2980,7 +2982,11 @@ function SFTPModal({ config, setConfig, target, onClose, toast }) {
   useEffect(() => {
     if (!connected) return;
     setLsLoading(true);
-    fetch(`/api/vault/sftp/ls?path=${encodeURIComponent(remotePath)}`)
+    fetch(`/api/vault/sftp/ls`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...config, remotePath }),
+    })
       .then(r => r.json())
       .then(data => {
         if (data.ok !== false && Array.isArray(data.items || data)) {
@@ -3030,7 +3036,7 @@ function SFTPModal({ config, setConfig, target, onClose, toast }) {
       const resp = await fetch("/api/vault/sftp/put", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files: [filename], remotePath }),
+        body: JSON.stringify({ ...config, localFilename: filename, remotePath }),
       });
       if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.error || `HTTP ${resp.status}`); }
       setDlProgress(p=>({...p,[filename]:100}));
@@ -3143,13 +3149,18 @@ function SFTPModal({ config, setConfig, target, onClose, toast }) {
                     return (
                       <div key={i} className="sftp-row">
                         <span className="sftp-icon">{item.type==="dir"?"📁":"🎬"}</span>
-                        <span className="sftp-name" onClick={()=>item.type==="dir"&&navigate(item.children)}>{item.name}</span>
+                        <span className="sftp-name" onClick={()=>item.type==="dir"&&navigate(remotePath.replace(/\/$/,"") + "/" + item.name)}>{item.name}</span>
                         {item.type==="file" && <span className="sftp-size">{item.size}</span>}
                         {item.type==="dir" && (
                           <button className="dl-sftp-btn" style={{marginLeft:"auto"}}
                             onClick={async(e)=>{e.stopPropagation();
+                              const subPath = remotePath.replace(/\/$/,"") + "/" + item.name;
                               try {
-                                const r = await fetch(`/api/vault/sftp/ls?path=${encodeURIComponent(item.children)}`);
+                                const r = await fetch(`/api/vault/sftp/ls`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ ...config, remotePath: subPath }),
+                                });
                                 const d = await r.json();
                                 const ch = (d.items || d || []).filter(x=>x.type==="file");
                                 ch.forEach((f,i)=>setTimeout(()=>startTransfer(f.name),i*150));

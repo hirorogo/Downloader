@@ -10,7 +10,7 @@
  * POST /api/queue                  キューに追加
  * DELETE /api/queue/:id            キューから削除
  * POST /api/sftp/connect           SFTP接続テスト
- * GET  /api/sftp/ls                SFTPディレクトリ一覧
+ * POST /api/sftp/ls                SFTPディレクトリ一覧
  * POST /api/sftp/get               SFTPからローカルへコピー
  * POST /api/sftp/put               ローカルからSFTPへ転送
  * GET  /api/sysinfo                CPU/Disk情報
