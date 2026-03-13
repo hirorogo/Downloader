@@ -551,10 +551,16 @@ async def get_info(url: str):
 
 @app.get("/api/status")
 async def status():
-    import psutil
+    try:
+        import psutil
+        cpu = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory().percent
+    except (ImportError, Exception):
+        cpu = -1
+        mem = -1
     return {
-        "cpu":          psutil.cpu_percent(interval=0.1),
-        "mem":          psutil.virtual_memory().percent,
+        "cpu":          cpu,
+        "mem":          mem,
         "active_tasks": sum(1 for t in tasks.values() if t.status in [DLStatus.downloading, DLStatus.converting, DLStatus.tagging]),
         "save_dir":     str(SAVE_DIR),
     }

@@ -24,7 +24,7 @@ ok "システムパッケージ完了"
 
 # ── 2. Python パッケージ ──
 info "Python パッケージをインストール中..."
-pip install --break-system-packages flask requests yt-dlp fastapi uvicorn aiofiles httpx psutil mutagen
+pip install --break-system-packages flask requests yt-dlp fastapi uvicorn aiofiles httpx mutagen
 ok "Python パッケージ完了"
 
 # ── 3. リポジトリ取得 ──
