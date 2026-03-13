@@ -347,12 +347,17 @@ async def run_download(task: DLTask):
             def _prog_hook(d):
                 if d["status"] == "downloading":
                     task.status = DLStatus.downloading
-                    raw = d.get("_percent_str", "0%").strip().replace("%", "")
-                    try:   task.progress = float(raw)
-                    except: pass
+                    # downloaded_bytes / total_bytes で直接計算（_percent_str より確実）
+                    downloaded = d.get("downloaded_bytes", 0)
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate")
+                    if downloaded and total and total > 0:
+                        task.progress = round(downloaded / total * 100, 1)
+                    else:
+                        raw = d.get("_percent_str", "0%").strip().replace("%", "")
+                        try:   task.progress = float(raw)
+                        except: pass
                     task.speed = d.get("_speed_str", "—").strip()
                     task.eta   = d.get("_eta_str",   "—").strip()
-                    total = d.get("total_bytes") or d.get("total_bytes_estimate")
                     if total:
                         task.size = f"{total/1024/1024:.0f} MB"
                 elif d["status"] == "finished":
