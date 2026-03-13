@@ -1143,19 +1143,21 @@ export default function AnimeVault() {
     try {
       // hd-2 (netmagcdn) はffmpegでDL可能、hd-1 (megacloud系) は403になるためhd-2優先
       const servers = ["hd-2", "hd-1"];
-      let hlsUrl = null, sd = null;
+      let hlsUrl = null, sd = null, lastErr = "";
       for (const srv of servers) {
         try {
           const streamRes = await fetch(`/api/anime/stream?id=${encodeURIComponent(episodeId)}&server=${srv}&type=${audioType||"sub"}`);
+          if (!streamRes.ok) { lastErr = `HTTP ${streamRes.status}`; continue; }
           const streamData = await streamRes.json();
           sd = Array.isArray(streamData?.data) ? streamData.data[0] : streamData?.data;
           const url = sd?.link?.file || sd?.sources?.[0]?.url;
           if (url) { hlsUrl = url; break; }
-        } catch {}
+          lastErr = "ストリームURLなし";
+        } catch (e) { lastErr = e.message; }
       }
       if (!hlsUrl) {
-        setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:"ストリームURL取得失敗"} : i));
-        toast(`ストリーム取得失敗: ${animeTitle} ${epLabel}`, "error");
+        setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:`ストリーム失敗: ${lastErr}`} : i));
+        toast(`ストリーム取得失敗: ${animeTitle} ${epLabel} (${lastErr})`, "error");
         return;
       }
       setLogs(l => [{ time: logNow(), level:"INFO", msg:`ストリーム取得: ${animeTitle} ${epLabel}` }, ...l]);
@@ -1167,9 +1169,15 @@ export default function AnimeVault() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: hlsUrl, filename, referer: sd?.referer || "https://megacloud.tv" }),
       });
+      if (!dlRes.ok) {
+        const errBody = await dlRes.json().catch(()=>({}));
+        setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:errBody.error||`HTTP ${dlRes.status}`} : i));
+        toast(`DL開始失敗: ${errBody.error||dlRes.status}`, "error");
+        return;
+      }
       const dlData = await dlRes.json();
       if (!dlData.task_id) {
-        setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:"DL開始失敗"} : i));
+        setQueue(q => q.map(i => i.id===itemId ? {...i, status:"error", speed:"task_id未取得"} : i));
         return;
       }
       setQueue(q => q.map(i => i.id===itemId ? {...i, status:"active", speed:"ダウンロード中…"} : i));
@@ -1659,14 +1667,16 @@ function DetailOverlay({ data, onClose, onAddQueue, toast }) {
     else setSelected(new Set(episodes.map((_,i) => i)));
   }
 
-  function addSelected() {
+  async function addSelected() {
     if (selected.size === 0) { toast("エピソードを選択してください","warn"); return; }
-    selected.forEach(i => {
-      const ep = episodes[i];
-      onAddQueue(ep, i+1, quality, audioType);
-    });
-    toast(`${selected.size}話をキューに追加しました [${quality}]`,"info");
+    const indices = [...selected].sort((a,b)=>a-b);
+    toast(`${indices.length}話をキューに追加中…`,"info");
     setSelected(new Set());
+    for (const i of indices) {
+      const ep = episodes[i];
+      await onAddQueue(ep, ep.episodeNumber || i+1, quality, audioType);
+      if (indices.length > 1) await new Promise(r => setTimeout(r, 800));
+    }
   }
 
   return (
