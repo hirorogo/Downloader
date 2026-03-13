@@ -1081,9 +1081,15 @@ export default function AnimeVault() {
     try {
       const res = await fetch("/api/vault/queue");
       const j = await res.json();
-      if (j.ok && j.queue?.length) setQueue(j.queue);
-      else setQueue([]);
-    } catch { setQueue([]); }
+      if (j.ok && Array.isArray(j.queue)) {
+        setQueue(q => {
+          // ローカルで作成したDLアイテム(id="q...")を保持し、サーバーアイテムとマージ
+          const localItems = q.filter(i => String(i.id).startsWith("q"));
+          const serverIds = new Set(j.queue.map(si => si.id));
+          return [...localItems.filter(i => !serverIds.has(i.id)), ...j.queue];
+        });
+      }
+    } catch {}
   }, []);
 
   useEffect(() => { refreshFiles(); refreshQueue(); }, [refreshFiles, refreshQueue]);
