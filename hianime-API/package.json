@@ -18,9 +18,12 @@
     "lint:fix": "eslint --fix && prettier . --write",
     "dev": "bun --hot index.js",
     "start": "bun index.js",
+    "dev:node": "node --import ./node-register.mjs --watch index.js",
+    "start:node": "node --import ./node-register.mjs index.js",
     "test": "vitest"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.11",
     "@hono/swagger-ui": "^0.5.3",
     "@hono/zod-openapi": "^1.2.0",
     "@scalar/hono-api-reference": "^0.9.30",

@@ -3,7 +3,11 @@
 BASE="$(cd "$(dirname "$0")" && pwd)"
 
 echo "Starting hianime-API (:3030)..."
-(cd "$BASE/hianime-API" && RATE_LIMIT_LIMIT=200 bun run dev) &
+if command -v bun &>/dev/null; then
+  (cd "$BASE/hianime-API" && RATE_LIMIT_LIMIT=200 bun run dev) &
+else
+  (cd "$BASE/hianime-API" && RATE_LIMIT_LIMIT=200 npm run start:node) &
+fi
 
 echo "Starting anime-vault server (:4040)..."
 (cd "$BASE/anime-vault/server" && ANIME_DIR="$BASE/downloads/anime" node index.js) &
