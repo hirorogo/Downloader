@@ -44,7 +44,7 @@ ok "リポジトリ取得完了"
 
 # ── 4. Node.js 依存 ──
 info "hianime-API の依存をインストール中..."
-cd "$INSTALL_DIR/hianime-API" && HUSKY=0 npm install --omit=dev
+cd "$INSTALL_DIR/hianime-API" && npm install --omit=dev --ignore-scripts
 ok "hianime-API 完了"
 
 info "anime-vault server の依存をインストール中..."
