@@ -22,12 +22,19 @@ pkg update -y && pkg upgrade -y
 pkg install -y git nodejs-lts python ffmpeg
 ok "システムパッケージ完了"
 
-# ── 2. Python パッケージ ──
+# ── 2. ネイティブ拡張が必要なPythonパッケージ (tur-repo) ──
+info "tur-repo (Termux User Repository) を追加中..."
+pkg install -y tur-repo
+info "プリビルドPythonパッケージをインストール中..."
+pkg install -y python-pydantic python-markupsafe
+ok "プリビルドパッケージ完了"
+
+# ── 3. Python パッケージ (pip) ──
 info "Python パッケージをインストール中..."
 pip install --break-system-packages flask requests yt-dlp fastapi uvicorn aiofiles httpx mutagen
 ok "Python パッケージ完了"
 
-# ── 3. リポジトリ取得 ──
+# ── 4. リポジトリ取得 ──
 INSTALL_DIR="$HOME/Downloader"
 if [ -d "$INSTALL_DIR" ]; then
   info "既存のリポジトリを更新中..."
@@ -39,7 +46,7 @@ else
 fi
 ok "リポジトリ取得完了"
 
-# ── 4. Node.js 依存 ──
+# ── 5. Node.js 依存 ──
 info "hianime-API の依存をインストール中..."
 cd "$INSTALL_DIR/hianime-API" && npm install --production
 ok "hianime-API 完了"
@@ -48,17 +55,17 @@ info "anime-vault server の依存をインストール中..."
 cd "$INSTALL_DIR/anime-vault/server" && npm install --production
 ok "anime-vault 完了"
 
-# ── 5. フロントエンドビルド ──
+# ── 6. フロントエンドビルド ──
 info "フロントエンドをビルド中..."
 cd "$INSTALL_DIR/frontend" && npm install && npm run build
 ok "フロントエンド完了"
 
-# ── 6. ダウンロードディレクトリ作成 ──
+# ── 7. ダウンロードディレクトリ作成 ──
 mkdir -p "$INSTALL_DIR/downloads/anime"
 mkdir -p "$INSTALL_DIR/downloads/youtube"
 ok "ダウンロードディレクトリ作成完了"
 
-# ── 7. ストレージアクセス ──
+# ── 8. ストレージアクセス ──
 if [ ! -d "$HOME/storage" ]; then
   info "ストレージ権限を設定中..."
   termux-setup-storage || true
