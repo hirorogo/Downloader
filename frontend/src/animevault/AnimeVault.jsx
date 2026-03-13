@@ -544,6 +544,7 @@ const STYLE = `
   font-family:var(--mono); font-size:8px; color:var(--dimmer);
   flex-shrink:0; text-align:center;
 }
+.ag-poster { width:40px; height:56px; object-fit:cover; border-radius:3px; flex-shrink:0; }
 .ag-title-wrap { flex:1; min-width:0; }
 .ag-title { font-size:13px; font-weight:700; margin-bottom:3px; }
 .ag-meta  { font-family:var(--mono); font-size:10px; color:var(--dim); }
@@ -610,7 +611,7 @@ const STYLE = `
   overflow:hidden; cursor:pointer; transition:all .18s;
 }
 .ag-grid-card:hover { border-color:var(--border2); transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,.35); }
-.ag-grid-poster { width:100%; aspect-ratio:3/4; object-fit:cover; display:block; background:var(--c3); }
+.ag-grid-poster { width:100%; aspect-ratio:3/4; object-fit:cover; display:block; background:var(--c3); border-radius:var(--r) var(--r) 0 0; }
 .ag-grid-poster-ph {
   width:100%; aspect-ratio:3/4; background:var(--c3);
   display:flex; align-items:center; justify-content:center;
@@ -1104,6 +1105,7 @@ export default function AnimeVault() {
   const [sftpConfig, setSftpConfig] = useState({
     host:"", port:"22", user:"", password:"", remotePath:"/media/anime", keyPath:""
   });
+  const [posterCache, setPosterCache] = useState({});
   const [showSftp, setShowSftp] = useState(false);
   const [sftpTarget, setSftpTarget] = useState(null); // { files[], label }
   const [showZip,  setShowZip]  = useState(false);
@@ -1125,6 +1127,20 @@ export default function AnimeVault() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [detail, showMeta, showZip, showSftp]);
+
+  // ─ Poster cache ─
+  const fetchPoster = useCallback(async (animeId) => {
+    if (!animeId || posterCache[animeId] !== undefined) return;
+    setPosterCache(p => ({ ...p, [animeId]: null }));
+    try {
+      const res = await fetch(`/api/anime/info/${animeId}`);
+      if (!res.ok) throw 0;
+      const j = await res.json();
+      setPosterCache(p => ({ ...p, [animeId]: j?.data?.anime?.info?.poster || "" }));
+    } catch {
+      setPosterCache(p => ({ ...p, [animeId]: "" }));
+    }
+  }, [posterCache]);
 
   // ─ Ping APIs ─
   useEffect(() => {
@@ -1386,10 +1402,12 @@ export default function AnimeVault() {
             {page==="browse"   && <BrowsePage onDetail={setDetail} toast={toast} />}
             {page==="queue"    && <QueuePage  queue={queue} setQueue={setQueue} toast={toast}/>}
             {page==="files"    && <FilesPage  files={files} setFiles={setFiles} toast={toast} onQueue={addToQueue}
+                                   posterCache={posterCache} fetchPoster={fetchPoster}
                                    onSftp={(target)=>{ setSftpTarget(target); setShowSftp(true); }}
                                    onZip={(target)=>{ setZipTarget(target); setShowZip(true); }}
                                    onMeta={(target)=>{ setMetaTarget(target); setShowMeta(true); }}/>}
             {page==="folders"  && <FolderPage files={files} toast={toast}
+                                   posterCache={posterCache} fetchPoster={fetchPoster}
                                    onSftp={(target)=>{ setSftpTarget(target); setShowSftp(true); }}
                                    onZip={(target)=>{ setZipTarget(target); setShowZip(true); }}
                                    onMeta={(target)=>{ setMetaTarget(target); setShowMeta(true); }}/>}
@@ -1981,7 +1999,7 @@ function QueuePage({ queue, setQueue, toast }) {
 // ══════════════════════════════════════════════════════════════════
 //  FILES PAGE  ― アニメ別グループ + URLまとめてDL + ダウンロードボタン
 // ══════════════════════════════════════════════════════════════════
-function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
+function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta, posterCache, fetchPoster }) {
   const [filter,      setFilter]      = useState("");
   const [view,        setView]        = useState("list");
   const [confirm,     setConfirm]     = useState(null);
@@ -2013,6 +2031,25 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
         g.files.some(f => (f.name||"").toLowerCase().includes(filter.toLowerCase())))
       .sort((a,b) => (a.series||"").localeCompare(b.series||"","ja"));
   }, [files, filter]);
+
+  // ─ Poster fetch ─
+  useEffect(() => {
+    groups.map(g => g.animeId).filter(Boolean).forEach(id => fetchPoster(id));
+  }, [groups]);
+
+  // ─ Play file in new tab ─
+  function playFile(f) {
+    window.open(`/api/vault/download/${encodeURIComponent(f.path || f.name)}`, '_blank');
+  }
+
+  // ─ Download more episodes ─
+  function downloadMore(g) {
+    const maxEp = Math.max(...g.files.map(f => f.ep || 0), 0);
+    setUrlInput(g.animeId || g.series);
+    setUrlEpFrom(maxEp + 1);
+    setUrlEpTo(maxEp + 12);
+    setShowUrl(true);
+  }
 
   function toggleExpand(id) { setExpanded(e=>({...e,[id]:!e[id]})); }
   function getGroupSel(g)   { return selected[g.series] || new Set(); }
@@ -2076,25 +2113,10 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
 
   // ─ HTTP download (実API) ─
   function httpDownload(f) {
-    if(dlProgress[f.name]!=null) return;
-    toast(`HTTP DL開始: ${f.name}`,"info");
-    setDlProgress(p=>({...p,[f.name]:1}));
     const url = `/api/vault/download/${encodeURIComponent(f.path||f.name)}`;
     const a = document.createElement("a");
     a.href = url; a.download = f.name; a.click();
-    let pct = 5;
-    const iv = setInterval(()=>{
-      pct = Math.min(95, pct + Math.random()*10 + 3);
-      setDlProgress(p=>({...p,[f.name]:Math.round(pct)}));
-    },500);
-    setTimeout(()=>{
-      clearInterval(iv);
-      setDlProgress(p=>({...p,[f.name]:100}));
-      setTimeout(()=>{
-        setDlProgress(p=>{const n={...p};delete n[f.name];return n;});
-        toast(`+ DL完了: ${f.name}`,"info");
-      },800);
-    },6000);
+    toast(`DL開始: ${f.name}`,"info");
   }
 
   // ─ Bulk HTTP download ─
@@ -2250,7 +2272,9 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
           {groups.map(g=>(
             <div key={g.series} className="ag-grid-card"
               onClick={()=>{setView("list");setExpanded(e=>({...e,[g.series]:true}));}}>
-              <div className="ag-grid-poster-ph">{g.series.slice(0,10)}</div>
+              {posterCache[g.animeId]
+                ? <img className="ag-grid-poster" src={posterCache[g.animeId]} alt="" loading="lazy"/>
+                : <div className="ag-grid-poster-ph">{g.series.slice(0,10)}</div>}
               <div className="ag-grid-info">
                 <div className="ag-grid-title">{g.series}</div>
                 <div className="ag-grid-count">{g.files.length}話 · {groupSize(g)}</div>
@@ -2272,7 +2296,9 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
             return (
               <div key={g.series} className={`ag-card ${isOpen?"expanded":""}`}>
                 <div className="ag-header" onClick={()=>toggleExpand(g.series)}>
-                  <div className="ag-poster-ph">{g.series.slice(0,6)}</div>
+                  {posterCache[g.animeId]
+                    ? <img className="ag-poster" src={posterCache[g.animeId]} alt="" loading="lazy"/>
+                    : <div className="ag-poster-ph">{g.series.slice(0,6)}</div>}
                   <div className="ag-title-wrap">
                     <div className="ag-title">{g.series}</div>
                     <div className="ag-meta">{g.animeId} · {g.files[0]?.quality||"—"}</div>
@@ -2325,7 +2351,8 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
                           }}>
                           # メタ編集
                         </button>
-                        <button className="btn sm" onClick={()=>toast(`${g.series} 全話再生キューへ`,"info")}>&gt; まとめて再生</button>
+                        <button className="btn sm" onClick={()=>{const targets=gSel.size>0?g.files.filter(f=>gSel.has(f.name)):g.files;targets.forEach(f=>playFile(f));}}>&gt; まとめて再生</button>
+                        <button className="btn primary sm" onClick={()=>downloadMore(g)}>+ 続きをDL</button>
                         {gSel.size>0&&<button className="btn danger sm" onClick={()=>deleteSelected(g)}>x 選択削除({gSel.size})</button>}
                         <button className="btn danger sm" onClick={()=>deleteGroup(g)}>x シリーズ削除</button>
                       </div>
@@ -2369,7 +2396,7 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
                                 </div>
                               ) : (
                                 <>
-                                  <button className="btn sm" title="再生" onClick={()=>toast(`再生: ${f.name}`,"info")}>&gt;</button>
+                                  <button className="btn sm" title="再生" onClick={()=>playFile(f)}>&gt;</button>
                                   <button className="dl-http-btn" title="HTTPダウンロード" onClick={()=>httpDownload(f)}>v HTTP</button>
                                   <button className="dl-sftp-btn" title="SFTPで転送" onClick={()=>onSftp({files:[f],label:f.name})}>v SFTP</button>
                                   <button className="meta-btn" title="メタデータ編集" onClick={()=>onMeta({files:[f]})}>#</button>
@@ -3394,7 +3421,7 @@ function SFTPModal({ config, setConfig, target, onClose, toast }) {
 // ══════════════════════════════════════════════════════════════════
 //  FOLDER PAGE  ― サーバー上フォルダ構造 + フォルダごとDL
 // ══════════════════════════════════════════════════════════════════
-function FolderPage({ files, toast, onSftp, onZip, onMeta }) {
+function FolderPage({ files, toast, onSftp, onZip, onMeta, posterCache, fetchPoster }) {
   const [selectedFolder, setSelectedFolder] = useState(null);
   const [dlProgress, setDlProgress] = useState({});
 
@@ -3412,6 +3439,10 @@ function FolderPage({ files, toast, onSftp, onZip, onMeta }) {
     ? folders.find(f=>f.name===selectedFolder)
     : null;
 
+  function playFile(f) {
+    window.open(`/api/vault/download/${encodeURIComponent(f.path || f.name)}`, '_blank');
+  }
+
   function folderSize(folder) {
     const total=folder.files.reduce((acc,f)=>{
       const sz=f.size||"0MB";
@@ -3423,17 +3454,10 @@ function FolderPage({ files, toast, onSftp, onZip, onMeta }) {
 
   function httpDownloadFolder(folder) {
     folder.files.forEach((f,i)=>{
-      if(dlProgress[f.name]!=null) return;
       setTimeout(()=>{
-        let pct=0;
-        const iv=setInterval(()=>{
-          pct=Math.min(100,pct+Math.random()*8+4);
-          setDlProgress(p=>({...p,[f.name]:Math.round(pct)}));
-          if(pct>=100){
-            clearInterval(iv);
-            setTimeout(()=>setDlProgress(p=>{const n={...p};delete n[f.name];return n;}),700);
-          }
-        },300);
+        const a = document.createElement("a");
+        a.href = `/api/vault/download/${encodeURIComponent(f.path||f.name)}`;
+        a.download = f.name; a.click();
       },i*200);
     });
     toast(`「${folder.name}」${folder.files.length}ファイルのHTTPダウンロード開始`,"info");
@@ -3551,15 +3575,12 @@ function FolderPage({ files, toast, onSftp, onZip, onMeta }) {
                       </div>
                     ) : (
                       <>
-                        <button className="btn sm" onClick={()=>toast(`再生: ${f.name}`,"info")}>&gt;</button>
+                        <button className="btn sm" onClick={()=>playFile(f)}>&gt;</button>
                         <button className="dl-http-btn" onClick={()=>{
-                          let pct2=0;
-                          const iv=setInterval(()=>{
-                            pct2=Math.min(100,pct2+Math.random()*8+4);
-                            setDlProgress(p=>({...p,[f.name]:Math.round(pct2)}));
-                            if(pct2>=100){clearInterval(iv);setTimeout(()=>setDlProgress(p=>{const n={...p};delete n[f.name];return n;}),700);}
-                          },300);
-                          toast(`HTTP DL開始: ${f.name}`,"info");
+                          const a=document.createElement("a");
+                          a.href=`/api/vault/download/${encodeURIComponent(f.path||f.name)}`;
+                          a.download=f.name; a.click();
+                          toast(`DL開始: ${f.name}`,"info");
                         }}>v HTTP</button>
                         <button className="dl-sftp-btn" onClick={()=>onSftp({files:[f],label:f.name})}>v SFTP</button>
                         <button className="meta-btn" onClick={()=>onMeta({files:[f]})}>#</button>
