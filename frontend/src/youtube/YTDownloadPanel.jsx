@@ -185,6 +185,10 @@ const css = `
   /* TOAST */
   .twrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:300}
   .toast{padding:10px 16px;border-radius:7px;background:var(--bg3);border:1px solid var(--border2);font-size:13px;display:flex;align-items:center;gap:8px;animation:tin .2s ease;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+  .toast-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:2px 6px;flex-shrink:0;transition:color .12s}
+  .toast-close:hover{color:var(--text)}
+  .toast-action{background:rgba(255,0,0,.08);border:1px solid var(--border2);color:var(--yt-soft);font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;flex-shrink:0}
+  .toast-action:hover{background:rgba(255,0,0,.15)}
   .toast.success{border-color:var(--green)}.toast.error{border-color:var(--red)}.toast.info{border-color:var(--blue)}.toast.meta{border-color:var(--purple)}
   @keyframes tin{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
 
@@ -214,11 +218,13 @@ const css = `
       grid-column:1;grid-row:3;
       flex-direction:row;overflow-x:auto;overflow-y:hidden;
       border-right:none;border-top:1px solid var(--border);
+      padding-bottom:env(safe-area-inset-bottom, 0);
+      -webkit-overflow-scrolling:touch;
     }
     .nav{
       flex-direction:column;padding:6px 12px;font-size:9px;
       border-left:none;border-bottom:2px solid transparent;gap:2px;
-      white-space:nowrap;
+      white-space:nowrap;min-height:44px;min-width:44px;
     }
     .nav.on{border-left-color:transparent;border-bottom-color:var(--yt)}
     .nav .ni{font-size:16px;width:auto}
@@ -252,11 +258,14 @@ const css = `
 
     .modal{max-width:100%;margin:10px}
     .modal-body{padding:14px}
+    .twrap{bottom:calc(52px + env(safe-area-inset-bottom, 0) + 8px);right:12px;left:12px}
+    .btn,.btn-yt,.btn-g{min-height:44px}
   }
 `;
 
 // ── Metadata Modal ────────────────────────────────────────────────────────────
 function MetaModal({ file, onClose, onSave, onToast }) {
+  useEffect(() => { const h=e=>e.key==="Escape"&&onClose(); window.addEventListener("keydown",h); return ()=>window.removeEventListener("keydown",h); }, [onClose]);
   const [fields, setFields] = useState({
     title:       file.title        || "",
     artist:      file.channel      || (file.folderName || ""),
@@ -406,6 +415,7 @@ function MetaModal({ file, onClose, onSave, onToast }) {
 
 // ── SFTP Modal ────────────────────────────────────────────────────────────────
 function SftpModal({ targets, onClose, onToast }) {
+  useEffect(() => { const h=e=>e.key==="Escape"&&onClose(); window.addEventListener("keydown",h); return ()=>window.removeEventListener("keydown",h); }, [onClose]);
   const [host,setHost]=useState("192.168.1.100");
   const [port,setPort]=useState("22");
   const [user,setUser]=useState("pi");
@@ -756,7 +766,7 @@ function NewDownload({ onAdd }) {
       <div className="card">
         <div className="clabel">YouTube URL</div>
         <div className="uiwrap">
-          <input className="ifield" placeholder="https://youtube.com/watch?v=... または playlist?list=..." value={url} onChange={e=>setUrl(e.target.value)}/>
+          <input className="ifield" placeholder="https://youtube.com/watch?v=... または playlist?list=..." value={url} onChange={e=>setUrl(e.target.value)} onKeyDown={e=>e.key==="Enter"&&url.trim()&&add()}/>
           <button className="upbtn" onClick={paste}>貼り付け</button>
         </div>
         {ispl&&<div className="hint"><span style={{color:"var(--amber)",flexShrink:0}}>📋</span>プレイリストURLを検出。範囲指定で一括ダウンロードできます。</div>}
@@ -992,10 +1002,12 @@ export default function YTDownloadPanel() {
     return () => { clearInterval(tQ); clearInterval(tF); clearInterval(tS); };
   }, [refreshQueue, refreshFiles, refreshStats]);
 
-  const toast=(msg,type="success")=>{
-    const id=++tid;
-    setToasts(t=>[...t,{id,msg,type}]);
-    setTimeout(()=>setToasts(t=>t.filter(x=>x.id!==id)),3500);
+  const dismissToast=(id)=>setToasts(t=>t.filter(x=>x.id!==id));
+  const toast=(msg,type="success",opts={})=>{
+    const id=++tid+Math.random();
+    const duration=opts.duration||(type==="error"?5000:3500);
+    setToasts(t=>[...t,{id,msg,type,action:opts.action||null}]);
+    if(duration>0)setTimeout(()=>setToasts(t=>t.filter(x=>x.id!==id)),duration);
   };
 
   const handleAdd=async({url,fmt,mode,ef,et,ispl,embedMeta,embedThumb})=>{
@@ -1047,7 +1059,11 @@ export default function YTDownloadPanel() {
         </div>
       </div>
       <div className="twrap">
-        {toasts.map(t=><div key={t.id} className={`toast ${t.type}`}>{t.type==="success"?"✓":t.type==="error"?"✕":t.type==="meta"?"🏷":"ℹ"} {t.msg}</div>)}
+        {toasts.map(t=><div key={t.id} className={`toast ${t.type}`}>
+          <span style={{flex:1}}>{t.type==="success"?"✓":t.type==="error"?"✕":t.type==="meta"?"🏷":"ℹ"} {t.msg}</span>
+          {t.action&&<button className="toast-action" onClick={()=>{t.action.onClick();dismissToast(t.id);}}>{t.action.label}</button>}
+          <button className="toast-close" onClick={()=>dismissToast(t.id)}>✕</button>
+        </div>)}
       </div>
     </div>
   );

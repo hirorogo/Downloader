@@ -306,6 +306,18 @@ const STYLE = `
 .ep-table tr:hover td { background:rgba(0,255,213,.025); }
 .ep-num { font-family:var(--mono); font-size:11px; color:var(--cyan); }
 .ep-filler { color:var(--amber); font-size:9px; font-family:var(--mono); }
+.ep-table-wrap {
+  max-height:calc(60vh - 120px); min-height:200px;
+  overflow-y:auto; border:1px solid var(--border); border-radius:var(--r);
+}
+.ep-table tr.ep-selected td { background:rgba(0,255,213,.06); }
+.ep-filter-input {
+  background:var(--c2); border:1px solid var(--border); color:var(--txt);
+  font-family:var(--mono); font-size:11px; padding:5px 10px; border-radius:var(--r); outline:none;
+  transition:border-color .14s;
+}
+.ep-filter-input:focus { border-color:var(--border2); }
+.ep-filter-input::placeholder { color:var(--dimmer); }
 
 /* ─ Checkbox ─ */
 .cb {
@@ -418,7 +430,19 @@ const STYLE = `
   font-family:var(--mono); font-size:11px;
   box-shadow:0 8px 24px rgba(0,0,0,.5);
   animation:slideIn .25s ease; min-width:260px;
+  display:flex; align-items:center; gap:8px;
 }
+.toast-close {
+  background:none; border:none; color:var(--dimmer); cursor:pointer;
+  font-size:12px; padding:2px 6px; line-height:1; flex-shrink:0; transition:color .12s;
+}
+.toast-close:hover { color:var(--txt); }
+.toast-action {
+  background:rgba(0,255,213,.12); border:1px solid var(--border2);
+  color:var(--cyan); font-family:var(--mono); font-size:10px;
+  padding:3px 8px; border-radius:3px; cursor:pointer; flex-shrink:0; transition:all .12s;
+}
+.toast-action:hover { background:rgba(0,255,213,.2); }
 .toast.err  { border-left-color:var(--rose); }
 .toast.warn { border-left-color:var(--amber); }
 @keyframes slideIn { from{transform:translateX(110%);opacity:0} to{transform:translateX(0);opacity:1} }
@@ -954,16 +978,18 @@ const STYLE = `
   .sidebar {
     width:100%; flex-direction:row; overflow-x:auto; overflow-y:hidden;
     border-right:none; border-top:1px solid var(--border);
-    order:1;
+    order:1; height:56px; flex-shrink:0;
+    padding-bottom:env(safe-area-inset-bottom, 0);
+    -webkit-overflow-scrolling:touch;
   }
   .main { order:0; }
   .logo { display:none; }
   .nav-group { display:flex; flex-direction:row; padding:0; }
   .nav-group-label { display:none; }
   .nav-item {
-    flex-direction:column; padding:8px 14px; font-size:9px;
+    flex-direction:column; padding:10px 14px; font-size:9px;
     border-left:none; border-top:2px solid transparent; gap:2px;
-    white-space:nowrap;
+    white-space:nowrap; min-height:44px; min-width:44px;
   }
   .nav-item.active { border-left-color:transparent; border-top-color:var(--cyan); }
   .nav-item .nav-ico { font-size:16px; width:auto; }
@@ -991,12 +1017,22 @@ const STYLE = `
   .file-series, .file-date { display:none; }
   .fb-toolbar { gap:6px; }
 
-  .detail-panel { margin:0; border-radius:0; max-width:100%; max-height:100vh; }
+  .detail-overlay { align-items:flex-end; padding:0; }
+  .detail-panel {
+    margin:0; border-radius:16px 16px 0 0; max-width:100%; max-height:92vh;
+    overflow-y:auto; animation:slideUp .25s ease;
+    padding-bottom:env(safe-area-inset-bottom, 0);
+  }
+  @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
   .detail-hero { flex-direction:column; }
   .detail-poster { width:100%; }
   .detail-poster img { max-height:200px; object-fit:cover; }
   .detail-poster-ph { width:100%; }
   .detail-eps-panel { padding:12px; }
+  .eps-toolbar { flex-wrap:wrap; gap:6px; }
+  .ep-filter-input { flex:1 1 100% !important; }
+  .ep-table-wrap { max-height:calc(70vh - 100px); }
+  .btn.sm, .btn.primary { min-height:44px; }
 
   .folder-page { flex-direction:column; height:auto; }
   .folder-tree { width:100%; max-height:120px; }
@@ -1006,6 +1042,7 @@ const STYLE = `
   .meta-fields-grid { grid-template-columns:1fr; }
 
   .modal-box, .zip-modal-box, .meta-modal-box { max-width:100%; margin:10px; }
+  .toast-wrap { bottom:calc(56px + env(safe-area-inset-bottom, 0) + 8px); right:12px; left:12px; }
 }
 `;
 
@@ -1016,14 +1053,36 @@ const STYLE = `
 // ══════════════════════════════════════════════════════════════════
 //  SMALL HELPERS
 // ══════════════════════════════════════════════════════════════════
+function ConfirmDialog({ message, detail, onConfirm, onCancel }) {
+  useEffect(() => {
+    const h = e => e.key === "Escape" && onCancel();
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onCancel]);
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onCancel()}>
+      <div className="modal-box" style={{ maxWidth:420, padding:24 }}>
+        <div style={{ fontSize:15, fontWeight:600, marginBottom:8 }}>⚠ {message}</div>
+        {detail && <div style={{ fontSize:12, color:"var(--dim)", marginBottom:18, lineHeight:1.6 }}>{detail}</div>}
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button className="btn sm" onClick={onCancel}>キャンセル</button>
+          <button className="btn sm" style={{background:"var(--rose)",color:"#fff",border:"1px solid var(--rose)"}} onClick={onConfirm}>削除する</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function useToast() {
   const [toasts, setToasts] = useState([]);
-  const add = useCallback((msg, type="info") => {
-    const id = Date.now();
-    setToasts(p => [...p, { id, msg, type }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500);
+  const dismiss = useCallback((id) => setToasts(p => p.filter(t => t.id !== id)), []);
+  const add = useCallback((msg, type="info", opts={}) => {
+    const id = Date.now() + Math.random();
+    const duration = opts.duration || (type === "error" ? 5000 : 3500);
+    setToasts(p => [...p, { id, msg, type, action: opts.action || null }]);
+    if (duration > 0) setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), duration);
   }, []);
-  return { toasts, add };
+  return { toasts, add, dismiss };
 }
 
 function Spinner() { return <span className="spin">⟳</span>; }
@@ -1051,7 +1110,21 @@ export default function AnimeVault() {
   const [zipTarget, setZipTarget] = useState(null); // { files[], label }
   const [showMeta, setShowMeta] = useState(false);
   const [metaTarget, setMetaTarget] = useState(null); // { files[] }
-  const { toasts, add: toast } = useToast();
+  const { toasts, add: toast, dismiss: dismissToast } = useToast();
+
+  // ─ Keyboard shortcuts (ESC to close modals) ─
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") {
+        if (showMeta) { setShowMeta(false); setMetaTarget(null); return; }
+        if (showZip)  { setShowZip(false); setZipTarget(null); return; }
+        if (showSftp) { setShowSftp(false); setSftpTarget(null); return; }
+        if (detail)   { setDetail(null); return; }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [detail, showMeta, showZip, showSftp]);
 
   // ─ Ping APIs ─
   useEffect(() => {
@@ -1372,7 +1445,9 @@ export default function AnimeVault() {
         <div className="toast-wrap">
           {toasts.map(t => (
             <div key={t.id} className={`toast ${t.type==="error"?"err":t.type==="warn"?"warn":""}`}>
-              {t.type==="error"?"✕ ":t.type==="warn"?"⚠ ":"✓ "}{t.msg}
+              <span style={{flex:1}}>{t.type==="error"?"✕ ":t.type==="warn"?"⚠ ":"✓ "}{t.msg}</span>
+              {t.action && <button className="toast-action" onClick={()=>{t.action.onClick();dismissToast(t.id);}}>{t.action.label}</button>}
+              <button className="toast-close" onClick={()=>dismissToast(t.id)}>✕</button>
             </div>
           ))}
         </div>
@@ -1499,6 +1574,19 @@ function BrowsePage({ onDetail, toast }) {
   const [loading, setLoading]   = useState(false);
   const [tab, setTab] = useState("trending");
   const debRef = useRef(null);
+  const searchRef = useRef(null);
+
+  // Cmd/Ctrl+K → focus search
+  useEffect(() => {
+    const h = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
 
   // Load home data (trending)
   useEffect(() => {
@@ -1582,8 +1670,9 @@ function BrowsePage({ onDetail, toast }) {
     <div>
       <div className="search-bar">
         <input
+          ref={searchRef}
           className="search-input"
-          placeholder="アニメを検索 または hianime.to URLを貼り付け"
+          placeholder="アニメを検索 または hianime.to URLを貼り付け (⌘K)"
           value={keyword}
           onChange={e => handleInput(e.target.value)}
           onKeyDown={e => e.key==="Enter" && handleUrlSubmit()}
@@ -1667,6 +1756,33 @@ function DetailOverlay({ data, onClose, onAddQueue, toast }) {
   const [quality, setQuality]   = useState("1080p");
   const [selected, setSelected] = useState(new Set());
   const [audioType, setAudioType] = useState("sub");
+  const [epFilter, setEpFilter] = useState("");
+  const lastClickedRef = useRef(null);
+
+  const filteredEps = useMemo(() => {
+    if (!epFilter.trim()) return episodes.map((ep, i) => ({ ep, i }));
+    const q = epFilter.toLowerCase();
+    return episodes.map((ep, i) => ({ ep, i })).filter(({ ep, i }) =>
+      (ep.title || "").toLowerCase().includes(q) ||
+      (ep.alternativeTitle || "").toLowerCase().includes(q) ||
+      String(i + 1).includes(q)
+    );
+  }, [episodes, epFilter]);
+
+  function handleEpClick(index, e) {
+    if (e?.nativeEvent?.shiftKey && lastClickedRef.current !== null) {
+      const from = Math.min(lastClickedRef.current, index);
+      const to = Math.max(lastClickedRef.current, index);
+      const s = new Set(selected);
+      for (let j = from; j <= to; j++) s.add(j);
+      setSelected(s);
+    } else {
+      const s = new Set(selected);
+      s.has(index) ? s.delete(index) : s.add(index);
+      setSelected(s);
+      lastClickedRef.current = index;
+    }
+  }
 
   function toggleAll() {
     if (selected.size === episodes.length) setSelected(new Set());
@@ -1736,9 +1852,13 @@ function DetailOverlay({ data, onClose, onAddQueue, toast }) {
               <option value="sub">字幕 (SUB)</option>
               <option value="dub">吹替 (DUB)</option>
             </select>
+            <input className="ep-filter-input" placeholder="エピソード検索 (#/タイトル)"
+              value={epFilter} onChange={e=>setEpFilter(e.target.value)}
+              style={{flex:"0 0 180px"}}/>
             <div style={{marginLeft:"auto",display:"flex",gap:8}}>
               <button className="btn sm" onClick={toggleAll}>
                 {selected.size===episodes.length?"全解除":"全選択"}
+                {epFilter && ` (${filteredEps.length}/${episodes.length})`}
               </button>
               <button className="btn primary sm" onClick={addSelected} disabled={selected.size===0}>
                 ⬇ {selected.size > 0 ? `${selected.size}話をキューに追加` : "エピソードを選択"}
@@ -1749,7 +1869,7 @@ function DetailOverlay({ data, onClose, onAddQueue, toast }) {
           {episodes.length === 0 ? (
             <div className="empty" style={{padding:"24px"}}><Spinner/> エピソード取得中…</div>
           ) : (
-            <div style={{maxHeight:260,overflowY:"auto",border:"1px solid var(--border)",borderRadius:"var(--r)"}}>
+            <div className="ep-table-wrap">
               <table className="ep-table">
                 <thead>
                   <tr>
@@ -1761,16 +1881,12 @@ function DetailOverlay({ data, onClose, onAddQueue, toast }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {episodes.map((ep,i) => (
-                    <tr key={i}>
+                  {filteredEps.map(({ ep, i }) => (
+                    <tr key={i} className={selected.has(i)?"ep-selected":""}>
                       <td>
                         <input type="checkbox" className="cb"
                           checked={selected.has(i)}
-                          onChange={() => {
-                            const s = new Set(selected);
-                            s.has(i) ? s.delete(i) : s.add(i);
-                            setSelected(s);
-                          }}
+                          onChange={(e)=>handleEpClick(i,e)}
                         />
                       </td>
                       <td><span className="ep-num">{String(i+1).padStart(2,"0")}</span></td>
@@ -1778,6 +1894,11 @@ function DetailOverlay({ data, onClose, onAddQueue, toast }) {
                       <td>{ep.isFiller && <span className="ep-filler">FILLER</span>}</td>
                     </tr>
                   ))}
+                  {filteredEps.length===0 && epFilter && (
+                    <tr><td colSpan={4} style={{textAlign:"center",padding:16,color:"var(--dimmer)",fontSize:12}}>
+                      「{epFilter}」に一致するエピソードがありません
+                    </td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1863,6 +1984,8 @@ function QueuePage({ queue, setQueue, toast }) {
 function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
   const [filter,      setFilter]      = useState("");
   const [view,        setView]        = useState("list");
+  const [confirm,     setConfirm]     = useState(null);
+  const deleteTimerRef = useRef(null);
   const [expanded,    setExpanded]    = useState({});
   const [selected,    setSelected]    = useState({});
   const [showUrl,     setShowUrl]     = useState(false);
@@ -1907,16 +2030,40 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
   function deleteSelected(g) {
     const s = getGroupSel(g);
     if(!s.size) return;
-    setFiles(fs=>fs.filter(f=>!(f.series===g.series&&s.has(f.name))));
-    setSelected(p=>({...p,[g.series]:new Set()}));
-    toast(`${s.size}ファイルを削除しました`,"warn");
-    [...s].forEach(name=>fetch(`/api/vault/files/${encodeURIComponent(name)}`,{method:"DELETE"}).catch(()=>{}));
+    setConfirm({
+      message: `${s.size}ファイルを削除しますか？`,
+      detail: `「${g.series}」から${s.size}件のファイルが完全に削除されます。`,
+      action: () => {
+        const deleted = files.filter(f=>f.series===g.series&&s.has(f.name));
+        setFiles(fs=>fs.filter(f=>!(f.series===g.series&&s.has(f.name))));
+        setSelected(p=>({...p,[g.series]:new Set()}));
+        clearTimeout(deleteTimerRef.current);
+        deleteTimerRef.current = setTimeout(()=>{
+          [...s].forEach(name=>fetch(`/api/vault/files/${encodeURIComponent(name)}`,{method:"DELETE"}).catch(()=>{}));
+        }, 5000);
+        toast(`${s.size}ファイルを削除しました`,"warn",{
+          action:{ label:"元に戻す", onClick:()=>{ clearTimeout(deleteTimerRef.current); setFiles(fs=>[...fs,...deleted]); toast("削除を取り消しました","info"); }}
+        });
+      }
+    });
   }
   function deleteGroup(g) {
     const names = g.files.map(f=>f.name);
-    setFiles(fs=>fs.filter(f=>f.series!==g.series));
-    toast(`「${g.series}」を全て削除しました`,"warn");
-    names.forEach(name=>fetch(`/api/vault/files/${encodeURIComponent(name)}`,{method:"DELETE"}).catch(()=>{}));
+    setConfirm({
+      message: `「${g.series}」を全削除しますか？`,
+      detail: `${names.length}ファイルが完全に削除されます。この操作は取り消せません。`,
+      action: () => {
+        const deleted = files.filter(f=>f.series===g.series);
+        setFiles(fs=>fs.filter(f=>f.series!==g.series));
+        clearTimeout(deleteTimerRef.current);
+        deleteTimerRef.current = setTimeout(()=>{
+          names.forEach(name=>fetch(`/api/vault/files/${encodeURIComponent(name)}`,{method:"DELETE"}).catch(()=>{}));
+        }, 5000);
+        toast(`「${g.series}」を全て削除しました`,"warn",{
+          action:{ label:"元に戻す", onClick:()=>{ clearTimeout(deleteTimerRef.current); setFiles(fs=>[...fs,...deleted]); toast("削除を取り消しました","info"); }}
+        });
+      }
+    });
   }
   function groupSize(g) {
     const total = g.files.reduce((acc,f)=>{
@@ -2242,6 +2389,11 @@ function FilesPage({ files, setFiles, toast, onQueue, onSftp, onZip, onMeta }) {
           })}
         </div>
       )}
+      {confirm && <ConfirmDialog
+        message={confirm.message} detail={confirm.detail}
+        onConfirm={()=>{ confirm.action(); setConfirm(null); }}
+        onCancel={()=>setConfirm(null)}
+      />}
     </div>
   );
 }

@@ -31,7 +31,7 @@ const SWITCHER_STYLE = `
 }
 .module-tab .tab-dot.yt { background: #ff0033; }
 .module-tab .tab-dot.av { background: #00ffd5; }
-@media(max-width:768px){.module-tab{padding:0 12px;font-size:9px}.module-switcher{height:28px}}
+@media(max-width:768px){.module-tab{padding:0 12px;font-size:9px;min-height:44px}.module-switcher{height:auto;padding-top:env(safe-area-inset-top, 0)}}
 `;
 
 export default function App() {
