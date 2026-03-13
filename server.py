@@ -251,6 +251,88 @@ def read_mp4_metadata(file_path: Path) -> dict:
         return {}
 
 
+# ── MP3 ID3 タグ読み書き (mutagen) ────────────────────────────────────────────
+def write_mp3_metadata(file_path: Path, meta: MetaFields) -> Path:
+    """mutagen で MP3 の ID3 タグを書き込む"""
+    from mutagen.mp3 import MP3
+    from mutagen.id3 import TIT2, TPE1, TPE2, TALB, TDRC, TCON, TRCK, COMM, APIC
+
+    audio = MP3(str(file_path))
+    if audio.tags is None:
+        audio.add_tags()
+    tags = audio.tags
+
+    if meta.title:                    tags["TIT2"] = TIT2(encoding=3, text=meta.title)
+    if meta.artist:                   tags["TPE1"] = TPE1(encoding=3, text=meta.artist)
+    if meta.album_artist or meta.artist:
+        tags["TPE2"] = TPE2(encoding=3, text=meta.album_artist or meta.artist)
+    if meta.album or meta.artist:     tags["TALB"] = TALB(encoding=3, text=meta.album or meta.artist)
+    if meta.date:                     tags["TDRC"] = TDRC(encoding=3, text=meta.date)
+    tags["TCON"] = TCON(encoding=3, text=meta.genre or "YouTube")
+    if meta.track:                    tags["TRCK"] = TRCK(encoding=3, text=meta.track)
+
+    # comment に URL と説明を入れる
+    cmt_parts = [p for p in [meta.url, meta.comment] if p]
+    if cmt_parts:
+        tags["COMM::eng"] = COMM(encoding=3, lang="eng", text="\n".join(cmt_parts))
+
+    # カバーアート埋め込み
+    if meta.thumbnail_url:
+        try:
+            resp = httpx.get(meta.thumbnail_url, timeout=10, follow_redirects=True)
+            if resp.status_code == 200:
+                mime = resp.headers.get("content-type", "image/jpeg")
+                tags["APIC:"] = APIC(encoding=3, mime=mime, type=3, data=resp.content)
+                log.info(f"[mp3-meta] カバーアート埋め込み完了")
+        except Exception as e:
+            log.warning(f"[mp3-meta] カバーアート取得失敗: {e}")
+
+    audio.save()
+    log.info(f"[mp3-meta] ID3タグ書き込み完了: {file_path.name}")
+    return file_path
+
+
+def read_mp3_metadata(file_path: Path) -> dict:
+    """mutagen で MP3 の ID3 タグを読み取る"""
+    from mutagen.mp3 import MP3
+    try:
+        audio = MP3(str(file_path))
+    except Exception:
+        return {}
+    if not audio.tags:
+        return {}
+    ID3_MAP = {
+        "TIT2": "title", "TPE1": "artist", "TPE2": "album_artist",
+        "TALB": "album", "TDRC": "date", "TCON": "genre", "TRCK": "track",
+    }
+    result = {}
+    for id3_key, name in ID3_MAP.items():
+        tag = audio.tags.get(id3_key)
+        if tag:
+            result[name] = str(tag)
+    comm = audio.tags.get("COMM::eng")
+    if comm:
+        result["comment"] = str(comm)
+    if audio.tags.get("APIC:"):
+        result["cover_art"] = "embedded"
+    return result
+
+
+# ── 汎用メタデータラッパー ─────────────────────────────────────────────────────
+def write_metadata(file_path: Path, meta: MetaFields) -> Path:
+    """拡張子に応じて MP4/M4A or MP3 のメタデータを書き込む"""
+    if file_path.suffix.lower() == ".mp3":
+        return write_mp3_metadata(file_path, meta)
+    return write_mp4_metadata(file_path, meta)
+
+
+def read_metadata(file_path: Path) -> dict:
+    """拡張子に応じて MP4/M4A or MP3 のメタデータを読み取る"""
+    if file_path.suffix.lower() == ".mp3":
+        return read_mp3_metadata(file_path)
+    return read_mp4_metadata(file_path)
+
+
 # ── ダウンロード本体 ───────────────────────────────────────────────────────────
 async def run_download(task: DLTask):
     async with sem:
@@ -329,7 +411,7 @@ async def run_download(task: DLTask):
             await loop.run_in_executor(None, _run)
 
             # ── メタデータ追加書き込みフェーズ ────────────────────────────────
-            if task.embed_meta and task.format not in (FormatEnum.mp3,):
+            if task.embed_meta:
                 task.status   = DLStatus.tagging
                 task.progress = 97.0
                 await bcast({"event": "progress", "task": task.to_dict()})
@@ -342,23 +424,25 @@ async def run_download(task: DLTask):
                 # yt-dlp が出力したファイルを特定（タイトルで検索）
                 safe_title = re.sub(r'[\\/*?:"<>|]', "_", task.title)
                 candidates = list(out_dir.glob(f"*{task.format}*.mp4")) + \
-                             list(out_dir.glob(f"*{task.format}*.m4a"))
+                             list(out_dir.glob(f"*{task.format}*.m4a")) + \
+                             list(out_dir.glob(f"*{task.format}*.mp3"))
 
                 for fpath in candidates:
                     meta = MetaFields(
-                        title        = task.title,
-                        artist       = task.channel,
-                        album_artist = task.channel,
-                        album        = task.channel,
-                        date         = task.upload_date,          # YYYYMMDD
-                        genre        = "YouTube",
-                        description  = task.description,
-                        url          = task.url,
-                        comment      = f"Source: {task.url}",
+                        title         = task.title,
+                        artist        = task.channel,
+                        album_artist  = task.channel,
+                        album         = task.channel,
+                        date          = task.upload_date,          # YYYYMMDD
+                        genre         = "YouTube",
+                        description   = task.description,
+                        url           = task.url,
+                        comment       = f"Source: {task.url}",
+                        thumbnail_url = task.thumbnail if task.embed_thumb else None,
                     )
                     try:
                         def _write_meta(p=fpath, m=meta):
-                            write_mp4_metadata(p, m)
+                            write_metadata(p, m)
                         await loop.run_in_executor(None, _write_meta)
                         task.meta_written = True
                         task.output       = str(fpath)
@@ -430,64 +514,61 @@ async def del_task(tid: str):
 @app.get("/api/metadata")
 async def get_metadata(path: str):
     """
-    指定した MP4 ファイルの現在のメタデータタグを返す。
-    ffprobe で読み取る。
+    指定したファイルの現在のメタデータタグを返す。
+    MP4/M4A は ffprobe、MP3 は mutagen で読み取る。
     """
     p = Path(path)
     if not p.exists() or not str(p).startswith(str(SAVE_DIR)):
         raise HTTPException(403, "アクセス不可")
     loop = asyncio.get_event_loop()
-    tags = await loop.run_in_executor(None, read_mp4_metadata, p)
+    tags = await loop.run_in_executor(None, read_metadata, p)
     return {"path": str(p), "tags": tags}
 
 @app.post("/api/metadata")
 async def post_metadata(req: MetaWriteRequest):
     """
-    指定した MP4/M4A ファイルにメタデータを書き込む。
-    ファイルは上書きされる（バックアップなし）。
+    指定したファイルにメタデータを書き込む。
+    MP4/M4A は ffmpeg、MP3 は mutagen (ID3) を使用。
     """
     p = Path(req.path)
     if not p.exists() or not str(p).startswith(str(SAVE_DIR)):
         raise HTTPException(403, "アクセス不可")
     loop = asyncio.get_event_loop()
     try:
-        await loop.run_in_executor(None, write_mp4_metadata, p, req.fields)
+        await loop.run_in_executor(None, write_metadata, p, req.fields)
         return {"ok": True, "path": str(p)}
-    except RuntimeError as e:
+    except Exception as e:
         raise HTTPException(500, str(e))
 
 @app.get("/api/metadata/batch")
 async def batch_get_metadata(folder: str):
     """
-    フォルダ内の全 MP4/M4A のメタデータをまとめて返す。
+    フォルダ内の全 MP4/M4A/MP3 のメタデータをまとめて返す。
     """
     d = SAVE_DIR / folder
     if not d.is_dir(): raise HTTPException(404)
     loop = asyncio.get_event_loop()
     result = []
-    for f in sorted(d.glob("*.mp4")):
-        tags = await loop.run_in_executor(None, read_mp4_metadata, f)
-        result.append({"file": f.name, "path": str(f), "tags": tags})
-    for f in sorted(d.glob("*.m4a")):
-        tags = await loop.run_in_executor(None, read_mp4_metadata, f)
-        result.append({"file": f.name, "path": str(f), "tags": tags})
+    for ext in ("*.mp4", "*.m4a", "*.mp3"):
+        for f in sorted(d.glob(ext)):
+            tags = await loop.run_in_executor(None, read_metadata, f)
+            result.append({"file": f.name, "path": str(f), "tags": tags})
     return result
 
 @app.post("/api/metadata/batch")
 async def batch_write_metadata(folder: str, fields: MetaFields, bg: BackgroundTasks):
     """
-    フォルダ内の全 MP4/M4A に同じメタデータフィールドを一括書き込み。
-    （album / artist 等の共通タグを後から補完する用途）
+    フォルダ内の全 MP4/M4A/MP3 に同じメタデータフィールドを一括書き込み。
     """
     d = SAVE_DIR / folder
     if not d.is_dir(): raise HTTPException(404)
-    files = list(d.glob("*.mp4")) + list(d.glob("*.m4a"))
+    files = list(d.glob("*.mp4")) + list(d.glob("*.m4a")) + list(d.glob("*.mp3"))
 
     async def _run_all():
         loop = asyncio.get_event_loop()
         for f in files:
             try:
-                await loop.run_in_executor(None, write_mp4_metadata, f, fields)
+                await loop.run_in_executor(None, write_metadata, f, fields)
                 log.info(f"[batch-meta] {f.name} 完了")
             except Exception as e:
                 log.error(f"[batch-meta] {f.name} 失敗: {e}")

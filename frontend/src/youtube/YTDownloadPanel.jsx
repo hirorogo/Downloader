@@ -318,7 +318,15 @@ function MetaModal({ file, onClose, onSave, onToast }) {
     setSaving(false);
   };
 
-  const MP4_TAGS = [
+  const isMp3 = file.name?.endsWith(".mp3") || file.path?.endsWith(".mp3");
+  const TAGS = isMp3 ? [
+    { key:"title",       atom:"TIT2", label:"タイトル",   ph:"動画タイトル" },
+    { key:"artist",      atom:"TPE1", label:"アーティスト (チャンネル名)", ph:"チャンネル名" },
+    { key:"album",       atom:"TALB", label:"アルバム (プレイリスト / チャンネル)", ph:"コレクション名" },
+    { key:"date",        atom:"TDRC", label:"日付 (YYYYMMDD)", ph:"20240315" },
+    { key:"genre",       atom:"TCON", label:"ジャンル",    ph:"YouTube" },
+    { key:"track",       atom:"TRCK", label:"トラック番号", ph:"1/12" },
+  ] : [
     { key:"title",       atom:"©nam", label:"タイトル",   ph:"動画タイトル" },
     { key:"artist",      atom:"©ART", label:"アーティスト (チャンネル名)", ph:"チャンネル名" },
     { key:"album",       atom:"©alb", label:"アルバム (プレイリスト / チャンネル)", ph:"コレクション名" },
@@ -331,7 +339,7 @@ function MetaModal({ file, onClose, onSave, onToast }) {
     <div className="modal-overlay" onClick={e => e.target===e.currentTarget && !saving && onClose()}>
       <div className="modal">
         <div className="modal-hd">
-          <span>🏷 MP4メタデータ編集</span>
+          <span>🏷 {isMp3 ? "MP3 ID3タグ" : "MP4メタデータ"}編集</span>
           <button className="close-btn" onClick={onClose} disabled={saving}>✕</button>
         </div>
         <div className="modal-body">
@@ -339,7 +347,7 @@ function MetaModal({ file, onClose, onSave, onToast }) {
           {/* 現在の埋め込みタグ（読み取り表示） */}
           <div className="meta-read-panel">
             <div className="head">
-              現在のタグ（ffprobe）
+              現在のタグ（{isMp3 ? "mutagen" : "ffprobe"}）
               <span className={`meta-status-badge ${file.meta_written ? "ok" : "no"}`}>
                 {file.meta_written ? "🏷 書き込み済み" : "未書き込み"}
               </span>
@@ -361,7 +369,7 @@ function MetaModal({ file, onClose, onSave, onToast }) {
           {/* 書き込みフォーム */}
           <div className="section-title">書き込む内容</div>
 
-          {MP4_TAGS.map(({ key, atom, label, ph }) => (
+          {TAGS.map(({ key, atom, label, ph }) => (
             <div key={key} style={{ marginBottom: 10 }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
                 <label style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--text3)", textTransform:"uppercase", letterSpacing:".08em" }}>
@@ -383,7 +391,7 @@ function MetaModal({ file, onClose, onSave, onToast }) {
           <div style={{ marginBottom:10 }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
               <label style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--text3)", textTransform:"uppercase", letterSpacing:".08em" }}>説明 / description</label>
-              <span style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--text3)", opacity:.7 }}>desc</span>
+              <span style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--text3)", opacity:.7 }}>{isMp3 ? "COMM" : "desc"}</span>
             </div>
             <textarea className="ifield" value={fields.description} onChange={e=>set("description",e.target.value)} disabled={saving} placeholder="概要欄テキスト" />
           </div>
@@ -392,14 +400,17 @@ function MetaModal({ file, onClose, onSave, onToast }) {
           <div style={{ marginBottom:4 }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
               <label style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--text3)", textTransform:"uppercase", letterSpacing:".08em" }}>コメント（元URL）</label>
-              <span style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--text3)", opacity:.7 }}>©cmt</span>
+              <span style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--text3)", opacity:.7 }}>{isMp3 ? "COMM" : "©cmt"}</span>
             </div>
             <input className="ifield" value={fields.comment} onChange={e=>set("comment",e.target.value)} disabled={saving} placeholder="https://youtube.com/watch?v=..." />
           </div>
 
           <div className="divider"/>
           <div style={{ fontSize:11, color:"var(--text3)", lineHeight:1.6 }}>
-            ※ ffmpeg でファイルを上書きします。カバーアート（covr）はダウンロード時にのみ埋め込まれます。
+            {isMp3
+              ? "※ mutagen で ID3 タグを書き込みます。カバーアート（APIC）はダウンロード時に自動埋め込みされます。"
+              : "※ ffmpeg でファイルを上書きします。カバーアート（covr）はダウンロード時にのみ埋め込まれます。"
+            }
           </div>
         </div>
         <div className="modal-ft">
@@ -819,7 +830,11 @@ function NewDownload({ onAdd }) {
         </div>
         {embedMeta&&(
           <div style={{marginTop:12,padding:"10px 14px",background:"var(--bg3)",borderRadius:6,fontSize:11,color:"var(--text3)",fontFamily:"var(--mono)",lineHeight:1.8}}>
-            書き込まれるタグ: <span style={{color:"var(--purple)"}}>©nam</span> タイトル · <span style={{color:"var(--purple)"}}>©ART</span> チャンネル · <span style={{color:"var(--purple)"}}>©alb</span> アルバム · <span style={{color:"var(--purple)"}}>©day</span> 日付 · <span style={{color:"var(--purple)"}}>©gen</span> ジャンル · <span style={{color:"var(--purple)"}}>©cmt</span> URL · <span style={{color:"var(--purple)"}}>desc</span> 説明{embedThumb&&<> · <span style={{color:"var(--purple)"}}>covr</span> カバーアート</>}
+            {fmt==="mp3" ? <>
+              書き込まれるタグ (ID3): <span style={{color:"var(--purple)"}}>TIT2</span> タイトル · <span style={{color:"var(--purple)"}}>TPE1</span> アーティスト · <span style={{color:"var(--purple)"}}>TALB</span> アルバム · <span style={{color:"var(--purple)"}}>TDRC</span> 日付 · <span style={{color:"var(--purple)"}}>TCON</span> ジャンル · <span style={{color:"var(--purple)"}}>COMM</span> URL{embedThumb&&<> · <span style={{color:"var(--purple)"}}>APIC</span> カバーアート</>}
+            </> : <>
+              書き込まれるタグ: <span style={{color:"var(--purple)"}}>©nam</span> タイトル · <span style={{color:"var(--purple)"}}>©ART</span> チャンネル · <span style={{color:"var(--purple)"}}>©alb</span> アルバム · <span style={{color:"var(--purple)"}}>©day</span> 日付 · <span style={{color:"var(--purple)"}}>©gen</span> ジャンル · <span style={{color:"var(--purple)"}}>©cmt</span> URL · <span style={{color:"var(--purple)"}}>desc</span> 説明{embedThumb&&<> · <span style={{color:"var(--purple)"}}>covr</span> カバーアート</>}
+            </>}
           </div>
         )}
       </div>
