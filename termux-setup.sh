@@ -44,11 +44,11 @@ ok "リポジトリ取得完了"
 
 # ── 4. Node.js 依存 ──
 info "hianime-API の依存をインストール中..."
-cd "$INSTALL_DIR/hianime-API" && npm install --production
+cd "$INSTALL_DIR/hianime-API" && HUSKY=0 npm install --omit=dev
 ok "hianime-API 完了"
 
 info "anime-vault server の依存をインストール中..."
-cd "$INSTALL_DIR/anime-vault/server" && npm install --production
+cd "$INSTALL_DIR/anime-vault/server" && npm install --omit=dev
 ok "anime-vault 完了"
 
 # ── 5. フロントエンドビルド ──
