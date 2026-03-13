@@ -6,14 +6,14 @@
 set -eo pipefail 2>/dev/null || true
 
 G='\033[0;32m'; C='\033[0;36m'; R='\033[0;31m'; N='\033[0m'
-ok()  { echo -e "${G}✓${N} $1"; }
-err() { echo -e "${R}✗${N} $1"; exit 1; }
-info(){ echo -e "${C}→${N} $1"; }
+ok()  { echo -e "${G}[OK]${N} $1"; }
+err() { echo -e "${R}[NG]${N} $1"; exit 1; }
+info(){ echo -e "${C}-->${N} $1"; }
 
 echo ""
-echo "╔══════════════════════════════════════════╗"
-echo "║   Downloader - Termux Setup              ║"
-echo "╚══════════════════════════════════════════╝"
+echo "=========================================="
+echo "   Downloader - Termux Setup"
+echo "=========================================="
 echo ""
 
 # ── 1. パッケージ ──
@@ -68,23 +68,14 @@ if [ ! -d "$HOME/storage" ]; then
 fi
 
 echo ""
-echo "╔══════════════════════════════════════════╗"
-echo "║   セットアップ完了！                       ║"
-echo "╠══════════════════════════════════════════╣"
-echo "║                                          ║"
-echo "║   起動コマンド:                            ║"
-echo "║   cd ~/Downloader && ./start.sh           ║"
-echo "║                                          ║"
-echo "║   アクセス:                                ║"
-echo "║   http://localhost:8080                   ║"
-echo "║                                          ║"
-echo "║   スマホのIP確認:                          ║"
-echo "║   ifconfig wlan0 | grep inet             ║"
-echo "║                                          ║"
-echo "║   Tips:                                   ║"
-echo "║   termux-wake-lock  # 画面オフでも維持    ║"
-echo "║                                          ║"
-echo "╚══════════════════════════════════════════╝"
+echo "=========================================="
+echo "   Setup Complete!"
+echo "=========================================="
+echo ""
+echo "   Start:  cd ~/Downloader && ./start.sh"
+echo "   Access: http://localhost:8080"
+echo "   IP:     ifconfig wlan0 | grep inet"
+echo "   Tip:    termux-wake-lock"
 echo ""
 
 # 起動するか確認
